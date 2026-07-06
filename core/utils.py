@@ -22,8 +22,19 @@ def normalize_angle(angle: float) -> float:
 
 
 def distance(a: np.ndarray, b: np.ndarray) -> float:
-    """Euclidean distance between two 2-D position vectors."""
-    return float(np.linalg.norm(a - b))
+    """Euclidean distance between two 2-D position vectors.
+
+    Uses math.hypot on raw floats instead of np.linalg.norm to avoid
+    NumPy dispatch overhead on scalar pairs.
+    """
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def distance_squared(a: np.ndarray, b: np.ndarray) -> float:
+    """Squared Euclidean distance (avoids the sqrt when only comparing)."""
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    return dx * dx + dy * dy
 
 
 def angle_between(a: np.ndarray, b: np.ndarray) -> float:
