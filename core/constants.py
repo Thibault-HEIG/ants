@@ -25,8 +25,8 @@ MAX_AGE_NORMALIZATION: float = 100.0  # seconds — used to normalize age for ne
 # ---------------------------------------------------------------------------
 # Food parameters
 # ---------------------------------------------------------------------------
-FOOD_NUTRITION: float = 30.0          # flat HP restored
-FOOD_SPAWN_RATE: float = 1.5          # new food items per second
+FOOD_NUTRITION: float = 50.0          # flat HP restored
+FOOD_SPAWN_RATE: float = 0.8          # new food items per second
 MAX_FOOD: int = 80                    # cap to avoid flooding the world
 FOOD_RADIUS: int = 6                  # collision/render radius in pixels
 

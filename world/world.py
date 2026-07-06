@@ -154,12 +154,13 @@ class World:
                     allies,
                     float(self.width),
                     float(self.height),
+                    spatial_hash=self.spatial_hash,
                 )
                 creature.update(dt, sensor_data)
 
-        # Phase 3 & 4: Physics and collision resolution
-        resolve_combat(self.creatures)
-        resolve_food_collisions(self.creatures, self.food_items)
+        # Phase 3 & 4: Physics and collision resolution (spatial hash accelerated)
+        resolve_combat(self.creatures, spatial_hash=self.spatial_hash)
+        resolve_food_collisions(self.creatures, self.food_items, spatial_hash=self.spatial_hash)
 
         # Phase 5: Cleanup dead entities
         for cls in list(self.creatures.keys()):

@@ -5,6 +5,9 @@ sensors.py — Vision and Sensory Perception System
 Perception system supporting arbitrary species without hardcoded class references.
 Creatures perceive the world through vision rays (left, right, forward),
 omnidirectional sensing ("smell"), and density awareness ("teamwork").
+
+Performance: all inner loops use scalar Python math (math.hypot, manual dot
+products) to avoid NumPy dispatch overhead on tiny 2-element vectors.
 """
 
 from __future__ import annotations
@@ -16,10 +19,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from core.constants import MAX_DENSITY_COUNT
-from core.utils import distance
 
 if TYPE_CHECKING:
     from world.food import Food
+    from world.physics import SpatialHash
 
 
 @dataclass
@@ -110,92 +113,96 @@ class SensorRay:
         self,
         origin: np.ndarray,
         heading: float,
-        food_items: list[Any],
-        enemies: list[Any],
-        allies: list[Any],
+        food_targets: list[tuple[float, float, float]],
+        enemy_targets: list[tuple[float, float, float]],
+        ally_targets: list[tuple[float, float, float]],
         world_width: float,
         world_height: float,
     ) -> RayResult:
-        """Cast this ray and find the nearest food, enemy, ally, and wall."""
+        """Cast this ray and find the nearest food, enemy, ally, and wall.
+
+        Targets are pre-extracted as (x, y, radius) tuples to avoid
+        repeated attribute lookups inside the hot loop.
+        """
         ray_angle = heading + self.angle_offset
-        ray_dir = np.array([math.cos(ray_angle), math.sin(ray_angle)])
+        rdx = math.cos(ray_angle)
+        rdy = math.sin(ray_angle)
         result = RayResult()
 
-        # Detect nearest food along this ray
-        result.food_distance = self._detect_nearest(
-            origin, ray_dir, [(f.position, f.radius) for f in food_items if not getattr(f, 'consumed', False)]
-        )
+        ox = float(origin[0])
+        oy = float(origin[1])
 
-        # Detect nearest enemy along this ray
-        result.enemy_distance = self._detect_nearest(
-            origin, ray_dir, [(e.position, e.radius) for e in enemies if getattr(e, 'alive', True)]
-        )
-
-        # Detect nearest ally along this ray (excluding self)
-        result.ally_distance = self._detect_nearest(
-            origin, ray_dir, [(a.position, a.radius) for a in allies if getattr(a, 'alive', True) and np.linalg.norm(a.position - origin) > 0.1]
-        )
-
-        # Detect wall distance
-        result.wall_distance = self._detect_wall(
-            origin, ray_dir, world_width, world_height
-        )
+        result.food_distance = self._detect_nearest(ox, oy, rdx, rdy, food_targets)
+        result.enemy_distance = self._detect_nearest(ox, oy, rdx, rdy, enemy_targets)
+        result.ally_distance = self._detect_nearest(ox, oy, rdx, rdy, ally_targets)
+        result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height)
 
         return result
 
     def _detect_nearest(
         self,
-        origin: np.ndarray,
-        ray_dir: np.ndarray,
-        targets: list[tuple[np.ndarray, float]],
+        ox: float, oy: float,
+        rdx: float, rdy: float,
+        targets: list[tuple[float, float, float]],
     ) -> float:
-        """Find the nearest target along the ray direction."""
-        nearest = self.max_range
+        """Find the nearest target along the ray direction.
 
-        for target_pos, target_radius in targets:
-            to_target = target_pos - origin
-            dist = float(np.linalg.norm(to_target))
+        All arithmetic is scalar Python — no NumPy calls inside the loop.
+        """
+        max_range = self.max_range
+        nearest = max_range
 
-            if dist < 1e-6:
+        for tx, ty, tradius in targets:
+            # Vector from origin to target
+            dx = tx - ox
+            dy = ty - oy
+
+            # Squared distance (skip sqrt where possible)
+            dist_sq = dx * dx + dy * dy
+
+            if dist_sq < 1e-12:
                 return 0.0
 
-            if dist > self.max_range:
+            if dist_sq > max_range * max_range:
                 continue
 
-            dot_product = float(np.dot(to_target, ray_dir))
+            # Dot product with ray direction
+            dot = dx * rdx + dy * rdy
 
-            if dot_product < 0:
+            if dot < 0.0:
                 continue
 
-            perp_dist = math.sqrt(max(0.0, dist * dist - dot_product * dot_product))
-            hit_tolerance = target_radius + 15.0
+            # Perpendicular distance squared
+            perp_sq = dist_sq - dot * dot
+            hit_tol = tradius + 15.0
+            hit_tol_sq = hit_tol * hit_tol
 
-            if perp_dist <= hit_tolerance and dot_product < nearest:
-                nearest = dot_product
+            if perp_sq <= hit_tol_sq and dot < nearest:
+                nearest = dot
 
-        return max(0.0, min(1.0, nearest / self.max_range))
+        return max(0.0, min(1.0, nearest / max_range))
 
     def _detect_wall(
         self,
-        origin: np.ndarray,
-        ray_dir: np.ndarray,
+        ox: float, oy: float,
+        rdx: float, rdy: float,
         world_width: float,
         world_height: float,
     ) -> float:
         """Calculate distance along the ray until it intersects a world boundary."""
         min_t = self.max_range
 
-        if abs(ray_dir[0]) > 1e-9:
-            t_left = -origin[0] / ray_dir[0]
-            t_right = (world_width - origin[0]) / ray_dir[0]
+        if abs(rdx) > 1e-9:
+            t_left = -ox / rdx
+            t_right = (world_width - ox) / rdx
             if t_left > 0:
                 min_t = min(min_t, t_left)
             if t_right > 0:
                 min_t = min(min_t, t_right)
 
-        if abs(ray_dir[1]) > 1e-9:
-            t_top = -origin[1] / ray_dir[1]
-            t_bottom = (world_height - origin[1]) / ray_dir[1]
+        if abs(rdy) > 1e-9:
+            t_top = -oy / rdy
+            t_bottom = (world_height - oy) / rdy
             if t_top > 0:
                 min_t = min(min_t, t_top)
             if t_bottom > 0:
@@ -238,12 +245,76 @@ class Sensors:
         allies: list[Any],
         world_width: float,
         world_height: float,
+        spatial_hash: SpatialHash | None = None,
     ) -> SensorData:
-        """Gather all sensor readings for one creature without hardcoded class dependencies."""
-        data = SensorData()
+        """Gather all sensor readings for one creature without hardcoded class dependencies.
 
+        When a spatial_hash is provided, only entities within the sensor range
+        are considered — reducing the inner-loop population from O(N) global
+        to O(k) local where k << N.
+        """
+        data = SensorData()
+        ox = float(position[0])
+        oy = float(position[1])
+        sr = self.sensor_range
+        dr = self.density_radius
+
+        # -----------------------------------------------------------------
+        # Build candidate sets — either from spatial hash or full lists
+        # -----------------------------------------------------------------
+        if spatial_hash is not None:
+            nearby = spatial_hash.query(position, max(sr, dr))
+            nearby_set = set(id(n) for n in nearby)
+
+            # Pre-extract (x, y, radius) tuples, filtering by category
+            food_targets: list[tuple[float, float, float]] = []
+            enemy_targets: list[tuple[float, float, float]] = []
+            ally_targets: list[tuple[float, float, float]] = []
+
+            enemy_ids = set(id(e) for e in enemies)
+            ally_ids = set(id(a) for a in allies)
+
+            for n in nearby:
+                nid = id(n)
+                px = float(n.position[0])
+                py = float(n.position[1])
+
+                if hasattr(n, 'consumed'):
+                    # It's a food entity
+                    if not n.consumed:
+                        food_targets.append((px, py, float(n.radius)))
+                elif nid in enemy_ids:
+                    if getattr(n, 'alive', True):
+                        enemy_targets.append((px, py, float(n.radius)))
+                elif nid in ally_ids:
+                    if getattr(n, 'alive', True):
+                        # Exclude self
+                        ddx = px - ox
+                        ddy = py - oy
+                        if ddx * ddx + ddy * ddy > 0.01:
+                            ally_targets.append((px, py, float(n.radius)))
+        else:
+            # Fallback: full-list mode (no spatial hash available)
+            food_targets = [
+                (float(f.position[0]), float(f.position[1]), float(f.radius))
+                for f in food_items if not getattr(f, 'consumed', False)
+            ]
+            enemy_targets = [
+                (float(e.position[0]), float(e.position[1]), float(e.radius))
+                for e in enemies if getattr(e, 'alive', True)
+            ]
+            ally_targets = [
+                (float(a.position[0]), float(a.position[1]), float(a.radius))
+                for a in allies if getattr(a, 'alive', True)
+                and math.hypot(a.position[0] - ox, a.position[1] - oy) > 0.1
+            ]
+
+        # -----------------------------------------------------------------
+        # Cast rays using the pre-extracted target tuples
+        # -----------------------------------------------------------------
         left_res = self.left_ray.cast(
-            position, direction, food_items, enemies, allies, world_width, world_height
+            position, direction, food_targets, enemy_targets, ally_targets,
+            world_width, world_height
         )
         data.food_left = left_res.food_distance
         data.enemy_left = left_res.enemy_distance
@@ -251,7 +322,8 @@ class Sensors:
         data.wall_left = left_res.wall_distance
 
         right_res = self.right_ray.cast(
-            position, direction, food_items, enemies, allies, world_width, world_height
+            position, direction, food_targets, enemy_targets, ally_targets,
+            world_width, world_height
         )
         data.food_right = right_res.food_distance
         data.enemy_right = right_res.enemy_distance
@@ -259,72 +331,88 @@ class Sensors:
         data.wall_right = right_res.wall_distance
 
         fwd_res = self.forward_ray.cast(
-            position, direction, food_items, enemies, allies, world_width, world_height
+            position, direction, food_targets, enemy_targets, ally_targets,
+            world_width, world_height
         )
         data.food_fwd = fwd_res.food_distance
         data.enemy_fwd = fwd_res.enemy_distance
         data.ally_fwd = fwd_res.ally_distance
         data.wall_fwd = fwd_res.wall_distance
 
-        # Omnidirectional sensing
-        food_positions = [f.position for f in food_items if not getattr(f, 'consumed', False)]
+        # -----------------------------------------------------------------
+        # Omnidirectional sensing — reuse the extracted tuples
+        # -----------------------------------------------------------------
+        food_positions = [(tx, ty) for tx, ty, _ in food_targets]
         data.nearest_food_dist, data.nearest_food_angle = self._detect_omnidirectional(
-            position, direction, food_positions
+            ox, oy, direction, food_positions
         )
 
-        enemy_positions = [e.position for e in enemies if getattr(e, 'alive', True)]
+        enemy_positions = [(tx, ty) for tx, ty, _ in enemy_targets]
         data.nearest_enemy_dist, data.nearest_enemy_angle = self._detect_omnidirectional(
-            position, direction, enemy_positions
+            ox, oy, direction, enemy_positions
         )
 
-        # Density awareness
-        ally_positions = [a.position for a in allies if getattr(a, 'alive', True) and np.linalg.norm(a.position - position) > 0.1]
-        data.ally_density = self._count_density(position, ally_positions)
-        data.enemy_density = self._count_density(position, enemy_positions)
+        # -----------------------------------------------------------------
+        # Density awareness — reuse the extracted tuples
+        # -----------------------------------------------------------------
+        data.ally_density = self._count_density(ox, oy, ally_targets)
+        data.enemy_density = self._count_density(ox, oy, enemy_targets)
 
         return data
 
     def _detect_omnidirectional(
         self,
-        origin: np.ndarray,
+        ox: float, oy: float,
         heading: float,
-        target_positions: list[np.ndarray],
+        target_positions: list[tuple[float, float]],
     ) -> tuple[float, float]:
-        """Find the nearest target in any direction (360°)."""
+        """Find the nearest target in any direction (360°).
+
+        Uses scalar math throughout — no NumPy calls.
+        """
         if not target_positions:
             return 1.0, 0.0
 
-        nearest_dist = float('inf')
+        nearest_dist_sq = float('inf')
         nearest_angle = 0.0
+        sr = self.sensor_range
 
-        for target_pos in target_positions:
-            to_target = target_pos - origin
-            dist = float(np.linalg.norm(to_target))
+        for tx, ty in target_positions:
+            dx = tx - ox
+            dy = ty - oy
+            dist_sq = dx * dx + dy * dy
 
-            if dist < nearest_dist:
-                nearest_dist = dist
+            if dist_sq < nearest_dist_sq:
+                nearest_dist_sq = dist_sq
 
-                if dist < 1e-6:
+                if dist_sq < 1e-12:
                     nearest_angle = 0.0
                 else:
-                    abs_angle = math.atan2(to_target[1], to_target[0])
+                    abs_angle = math.atan2(dy, dx)
                     rel_angle = abs_angle - heading
                     rel_angle = math.atan2(math.sin(rel_angle), math.cos(rel_angle))
                     nearest_angle = rel_angle / math.pi
 
-        normalised_dist = max(0.0, min(1.0, nearest_dist / self.sensor_range))
+        nearest_dist = math.sqrt(nearest_dist_sq)
+        normalised_dist = max(0.0, min(1.0, nearest_dist / sr))
         return normalised_dist, nearest_angle
 
     def _count_density(
         self,
-        origin: np.ndarray,
-        target_positions: list[np.ndarray],
+        ox: float, oy: float,
+        targets: list[tuple[float, float, float]],
     ) -> float:
-        """Count how many targets are within the density radius."""
+        """Count how many targets are within the density radius.
+
+        Compares squared distances to avoid sqrt calls.
+        """
+        dr_sq = self.density_radius * self.density_radius
         count = 0
-        for target_pos in target_positions:
-            dist = float(np.linalg.norm(target_pos - origin))
-            if dist <= self.density_radius:
+
+        for tx, ty, _ in targets:
+            dx = tx - ox
+            dy = ty - oy
+            if dx * dx + dy * dy <= dr_sq:
                 count += 1
 
         return min(1.0, count / MAX_DENSITY_COUNT)
