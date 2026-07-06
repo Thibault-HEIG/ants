@@ -1,4 +1,5 @@
-"""Allow running the simulator as a package: python -m ant_simulator"""
-from ant_simulator.main import main
+"""Allow running the simulator as a directory or package: python . or python -m core.engine"""
+from core.engine import main
 
-main()
+if __name__ == "__main__":
+    main()
