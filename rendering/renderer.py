@@ -61,8 +61,8 @@ class Renderer:
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
         self.sprites: dict[str, pygame.Surface] = {}
 
-        self._load_sprite("Ant", os.path.join(assets_dir, "ant_sprite.png"), (24, 24))
-        self._load_sprite("Spider", os.path.join(assets_dir, "spider_sprite.png"), (32, 32))
+        self._load_sprite("Ant", os.path.join(assets_dir, "ant.png"), (24, 24))
+        self._load_sprite("Spider", os.path.join(assets_dir, "spider.png"), (32, 32))
 
     def _load_sprite(self, species_name: str, filepath: str, size: tuple[int, int]) -> None:
         try:
@@ -99,13 +99,7 @@ class Renderer:
             pygame.draw.circle(self.screen, (80, 220, 100), (fx, fy), int(food.radius))
             pygame.draw.circle(self.screen, (150, 255, 170), (fx, fy), max(1, int(food.radius - 2)))
 
-        # 3. Dead Creatures (rendered beneath living creatures)
-        for cls, dead_list in world.dead_creatures.items():
-            species_name = getattr(cls, "species_name", cls.__name__)
-            for dead_c in dead_list:
-                self._draw_creature(dead_c, species_name, is_dead=True)
-
-        # 4. Living Creatures
+        # 3. Living Creatures
         for cls, alive_list in world.creatures.items():
             species_name = getattr(cls, "species_name", cls.__name__)
             for creature in alive_list:
@@ -123,14 +117,12 @@ class Renderer:
             total = simulation.get_total_spawned(cls) if simulation and hasattr(simulation, "get_total_spawned") else alive
             creature_stats[name] = (alive, total)
 
-        gen = getattr(simulation, "generation", 1) if simulation else 1
         speed = getattr(simulation, "speed_multiplier", 1.0) if simulation else 1.0
 
         draw_hud_panel(
             self.screen,
             self.font,
             self.width,
-            generation=gen,
             round_time=world.round_time,
             sim_speed=speed,
             fps=self.clock.get_fps(),

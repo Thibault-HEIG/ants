@@ -3,7 +3,7 @@ spider_constants.py — Dedicated Parameters and Fitness Weights for Spiders
 ==========================================================================
 
 Stores all species-specific configuration, physical limitations, sensory ranges,
-and fitness weights for the Spider (Predator) species.
+and fitness weights for the Spider species.
 """
 
 # Population and Lifecycle

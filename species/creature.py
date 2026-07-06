@@ -19,7 +19,7 @@ from core.constants import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     HEALTH_DECAY_RATE,
-    ROUND_TIME_LIMIT,
+    MAX_AGE_NORMALIZATION,
     ZONE_BOUNDARY_X,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
@@ -131,7 +131,7 @@ class Creature(ABC):
         zone = 1.0 if self.position[0] >= ZONE_BOUNDARY_X else 0.0
         effective_max_speed = self.get_effective_max_speed(zone)
         speed_normalized = self.speed / effective_max_speed if effective_max_speed > 0 else 0.0
-        age_normalized = min(1.0, self.survival_time / ROUND_TIME_LIMIT) if ROUND_TIME_LIMIT > 0 else 0.0
+        age_normalized = min(1.0, self.survival_time / MAX_AGE_NORMALIZATION) if MAX_AGE_NORMALIZATION > 0 else 0.0
 
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 

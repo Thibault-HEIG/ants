@@ -2,7 +2,7 @@
 genetics.py — Evolutionary Algorithm and Breeding
 =================================================
 
-Implements truncation selection, Gaussian mutation, and next-generation
+Implements truncation selection, Gaussian mutation, and continuous fitness-based
 breeding for any creature species without hardcoded type dependencies.
 """
 
@@ -21,7 +21,7 @@ def select_parents(
     creatures: list[Creature],
     top_fraction: float = SELECTION_FRACTION,
 ) -> list[Creature]:
-    """Select the fittest creatures as parents for the next generation using truncation selection."""
+    """Select the fittest creatures as parents for reproduction using truncation selection."""
     if not creatures:
         return []
 
@@ -52,12 +52,12 @@ def mutate(
     return child
 
 
-def create_next_generation(
+def create_offspring_batch(
     creatures: list[Creature],
     population_size: int,
     rng: np.random.Generator,
 ) -> list[np.ndarray]:
-    """Produce mutated genomes for the entire next generation from top performers."""
+    """Produce mutated genomes for a population batch from top performing ancestors."""
     parents = select_parents(creatures)
 
     if not parents:

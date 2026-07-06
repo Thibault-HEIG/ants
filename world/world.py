@@ -22,7 +22,7 @@ from core.constants import (
 from core.utils import SpeciesStats
 from evolution.genetics import mutate, select_parents
 from species.ant import Ant
-from species.spider import Spider, Predator
+from species.spider import Spider
 from world.food import Food
 from world.physics import SpatialHash, resolve_combat, resolve_food_collisions
 from world.environment import EnvironmentSystem
@@ -94,30 +94,21 @@ class World:
 
     @property
     def spiders(self) -> list[Spider]:
-        # Handle Spider or legacy Predator key if present
-        if Spider in self.creatures:
-            return self.creatures[Spider]
-        return self.creatures.get(Predator, [])
+        return self.creatures.get(Spider, [])
 
     @spiders.setter
     def spiders(self, value: list[Spider]) -> None:
         if Spider in self.creatures:
             self.creatures[Spider] = value
-        elif Predator in self.creatures:
-            self.creatures[Predator] = value
 
     @property
     def dead_spiders(self) -> list[Spider]:
-        if Spider in self.dead_creatures:
-            return self.dead_creatures[Spider]
-        return self.dead_creatures.get(Predator, [])
+        return self.dead_creatures.get(Spider, [])
 
     @dead_spiders.setter
     def dead_spiders(self, value: list[Spider]) -> None:
         if Spider in self.dead_creatures:
             self.dead_creatures[Spider] = value
-        elif Predator in self.dead_creatures:
-            self.dead_creatures[Predator] = value
 
     # ------------------------------------------------------------------
     # Per-frame update loop
@@ -174,18 +165,34 @@ class World:
         for cls in list(self.creatures.keys()):
             newly_dead = [c for c in self.creatures[cls] if not getattr(c, "alive", False)]
             self.dead_creatures[cls].extend(newly_dead)
+            if len(self.dead_creatures[cls]) > 100:
+                self.dead_creatures[cls].sort(key=lambda c: c.compute_fitness(), reverse=True)
+                self.dead_creatures[cls] = self.dead_creatures[cls][:100]
             self.creatures[cls] = [c for c in self.creatures[cls] if getattr(c, "alive", False)]
+
 
         self.food_items = [f for f in self.food_items if not getattr(f, "consumed", False)]
 
-        # Phase 5.5: Fitness-Based Reproduction
+        # Phase 5.5: Continuous Fitness-Based Reproduction & Extinction Recovery
         for cls in self.active_species:
             pop = self.creatures[cls]
             max_pop = getattr(cls, "max_population", 100)
             threshold = getattr(cls, "reproduction_threshold", 200.0)
             available = max_pop - len(pop)
 
-            if available > 0 and len(pop) >= 1:
+            if len(pop) == 0:
+                # Extinction recovery: repopulate starter batch from fittest dead ancestors (or fresh)
+                dead_pool = self.dead_creatures.get(cls, [])
+                init_count = getattr(cls, "initial_count", 10)
+                if dead_pool:
+                    from evolution.genetics import create_offspring_batch
+                    new_genomes = create_offspring_batch(dead_pool, init_count, self.rng)
+                    self._spawn_species(cls, new_genomes)
+                    self.dead_creatures[cls].clear()
+                else:
+                    self._spawn_species(cls)
+                self.repro_timers[cls] = 0.0
+            elif available > 0 and len(pop) >= 1:
                 self.repro_timers[cls] += dt * available
                 while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
                     self.repro_timers[cls] -= threshold
@@ -238,7 +245,7 @@ class World:
         genomes_by_species: dict[type, list[np.ndarray]] | list[np.ndarray],
         spider_genomes: list[np.ndarray] | None = None,
     ) -> None:
-        """Reset world for next generation, accepting dynamic genome dicts or legacy signatures."""
+        """Reset world and spawn initial populations."""
         if isinstance(genomes_by_species, dict):
             gen_map = genomes_by_species
         else:
@@ -247,8 +254,6 @@ class World:
                 gen_map[Ant] = genomes_by_species
             if Spider in self.active_species and spider_genomes is not None:
                 gen_map[Spider] = spider_genomes
-            elif Predator in self.active_species and spider_genomes is not None:
-                gen_map[Predator] = spider_genomes
 
         for cls in self.active_species:
             self._spawn_species(cls, gen_map.get(cls))

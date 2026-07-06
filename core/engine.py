@@ -36,7 +36,7 @@ def main() -> None:
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    # Reset current generation
+                    # Reset simulation world and spawn initial populations
                     simulation.world.reset_with_genomes({})
                 elif event.key == pygame.K_s:
                     renderer.toggle_sensors()

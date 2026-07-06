@@ -4,7 +4,6 @@ spider.py — The Spider Species Implementation
 
 Inherits shared spatial, lifecycle, and neural mechanics from Creature.
 Overrides species-specific constants, zone speed behaviors, and fitness logic.
-Includes backwards compatibility alias Predator = Spider.
 """
 
 from __future__ import annotations
@@ -27,7 +26,6 @@ from species.spider_constants import (
     SPIDER_REPRODUCTION_THRESHOLD,
     MAX_SPIDERS,
     DENSITY_RADIUS_SPIDER,
-    FITNESS_SURVIVAL_DIVISOR,
     FITNESS_SURVIVAL_WEIGHT,
     FITNESS_FOOD_WEIGHT,
     FITNESS_ENEMIES_TOUCHED_WEIGHT,
@@ -86,7 +84,3 @@ class Spider(Creature):
             + self.food_eaten * FITNESS_FOOD_WEIGHT
             + self.enemies_touched * FITNESS_ENEMIES_TOUCHED_WEIGHT
         )
-
-
-# Backwards compatibility alias
-Predator = Spider

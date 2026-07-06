@@ -12,16 +12,20 @@ A real-time co-evolutionary simulation where **ants** and **spiders** each evolv
 # Install dependencies
 pip install numpy pygame
 
-# Run the simulation
-python -m ant_simulator
+# Run the simulation from the project root
+python3 main.py
+
+# Or execute the engine module directly
+python3 -m core.engine
 ```
 
 ### Controls
 
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` | Increase / decrease simulation speed (0.5×–8×) |
+| `↑` / `↓` | Increase / decrease simulation speed (0.5×–64×) |
 | `Space` | Pause / unpause |
+| `S` | Toggle vision ray / sensor visualization |
 | `R` | Restart simulation |
 | `Escape` | Quit |
 
@@ -31,18 +35,18 @@ python -m ant_simulator
 
 ### The Core Loop
 
-Each creature (ant or spider) runs this cycle **every frame**:
+Each creature runs this cycle **every frame**:
 
 ```
 Sense → Think → Act → Evolve
 ```
 
 1. **Sense** — Vision rays and omnidirectional sensors detect food, enemies, allies, and walls.
-2. **Think** — A neural network processes 22 sensor inputs and outputs `[turn, speed]`.
-3. **Act** — The creature moves according to the brain's decision.
+2. **Think** — A neural network processes 22 sensor inputs and outputs `[turn, speed, attack]`.
+3. **Act** — The creature moves and engages in combat according to the brain's decision.
 4. **Evolve** — Creatures that survive long enough reproduce (continuous evolution). Their children inherit mutated copies of the parent's brain weights.
 
-No fitness function drives generational resets — evolution is **continuous**. An ant that stays above 50% HP long enough spawns a mutated child nearby.
+No arbitrary fitness function drives generational resets — evolution is **continuous**. A creature that survives above its reproduction threshold long enough spawns a mutated child nearby.
 
 ### The World
 
@@ -51,16 +55,16 @@ The 1200×800 arena is divided into two zones:
 | Zone | Location | Properties |
 |------|----------|------------|
 | **Danger Zone** (red tint) | Left half | Spiders move at ant speed here. Less food spawns (20%). |
-| **Safe Zone** (green tint) | Right half | Spiders are slow. Most food spawns here (80%). |
+| **Safe Zone** (green tint) | Right half | Spiders move at normal speed. Most food spawns here (80%). |
 
-This asymmetry forces interesting strategic trade-offs: ants must venture into danger for territory, while spiders benefit from hunting in their fast zone.
+This asymmetry forces interesting strategic trade-offs: ants must venture into danger for territory and food, while spiders benefit from hunting in their fast zone.
 
 ### Species Comparison
 
 | Attribute | 🐜 Ant | 🕷️ Spider |
 |-----------|--------|-----------|
-| Population | 100 (cap: 300) | 15 (cap: 100) |
-| Health | 100 HP | 500 HP |
+| Population | 100 (cap: 300) | 5 (cap: 100) |
+| Initial Health | 100 HP | 300 HP |
 | Speed | 150 px/s | 80 px/s (150 in Danger Zone) |
 | Damage | 50 | 80 |
 | Attack Cost | 20 HP/s | 30 HP/s |
@@ -145,95 +149,120 @@ Counts of nearby allies and enemies within sensor range, normalised by a cap of 
 
 ## Evolution
 
-### Continuous Evolution (primary mechanism)
+### Continuous Evolution
 
-No generational resets. Creatures reproduce **during the simulation** based on fitness ranking and population pressure:
+Creatures reproduce **during the simulation** based on fitness ranking and population pressure:
 
-- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` from `genetics.py`, which dynamically scales the parent pool while ensuring at least up to 3 parents when numbers are small). A mutated child is spawned near the parent.
+- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` in `genetics.py`, which dynamically scales the parent pool). A mutated child is spawned near the parent.
 - **Dynamic Spawn Rate**: The time interval between spawns scales dynamically based on available population slots:
   `interval = THRESHOLD / (max_population - current_population)`
   
-  When a population is small (many available slots), spawning happens rapidly. As the population approaches its cap (300 for ants, 100 for spiders), available slots approach zero, causing the spawn interval to increase dramatically and naturally stabilizing population numbers without exponential blowup.
+  When a population is small (many available slots), spawning happens rapidly. As the population approaches its cap, available slots approach zero, causing the spawn interval to increase dramatically and naturally stabilizing population numbers without exponential blowup.
 
 ### Mutation
 
-Every gene is mutated with Gaussian noise (mean=0, σ=0.1). There is no crossover — children are mutated clones of a single parent.
+Every gene is mutated with Gaussian noise (mean=0, σ=0.5). There is no crossover — children are mutated clones of a single parent.
 
 ### Fitness Function
 
-Used for ranking and statistics. Fitness is calculated directly from raw performance metrics (survival time, food consumed, and combat engagements). Because ants and spiders have different lifespans and roles, each species uses tailored weighting:
+Used for ranking and parent selection. Fitness is calculated directly from raw performance metrics (survival time, food consumed, and combat engagements):
 
 ```python
 # Ants
-fitness = (survival_time / 20) * 10.0 + food_eaten * 30.0 + enemies_touched * 50.0
+fitness = (survival_time / 20.0) * 10.0 + food_eaten * 30.0 + enemies_touched * 50.0
 
 # Spiders
-fitness = (survival_time / 20) * 10.0 + food_eaten * 10.0 + enemies_touched * 50.0
+fitness = (survival_time / 20.0) * 10.0 + food_eaten * 10.0 + enemies_touched * 50.0
 ```
 
 > [!NOTE]
-> Historical maximum records (`SpeciesStats`) are tracked independently for both ants and spiders across the entire simulation run and displayed in real-time on the HUD in small font.
+> Historical maximum records (`SpeciesStats`) are tracked independently across the entire simulation run and displayed in real-time on the HUD.
 
 ---
 
-## Project Structure
+## Modular OOP Project Structure
+
+The codebase is engineered with strict Object-Oriented Programming (OOP) abstraction, modular package structures, and zero hardcoded class dependencies in the update loop:
 
 ```
-ant/
+ants-world/
 ├── assets/
 │   ├── ant.png              # Ant sprite
 │   ├── food.png             # Food sprite
-│   └── predator.png         # Spider sprite
-└── ant_simulator/
-    ├── __init__.py           # Package docstring
-    ├── __main__.py           # Entry point (python -m ant_simulator)
-    ├── main.py               # Pygame loop, input handling
-    ├── simulation.py         # Top-level orchestrator (stats, reset)
-    ├── world.py              # Entity lifecycle, physics, combat, food spawning
-    ├── ant.py                # Ant entity (position, health, brain, sensors)
-    ├── predator.py           # Spider entity (same structure as ant)
-    ├── brain.py              # Neural network (22→8→3, forward pass, genome encoding)
-    ├── sensors.py            # Vision rays, omnidirectional sensing, density counting
-    ├── genetics.py           # Selection, mutation, next-generation breeding
-    ├── food.py               # Food entity (position, nutrition, consumed flag)
-    ├── renderer.py           # Pygame rendering (sprites, health bars, HUD)
-    ├── constants.py          # All tunable parameters (single source of truth)
-    └── utils.py              # Pure math helpers (clamp, distance, angle)
+│   └── spider.png           # Spider sprite
+├── core/
+│   ├── __init__.py
+│   ├── engine.py            # Main application loop, Pygame input & event handling
+│   ├── simulation.py        # Top-level orchestrator & ACTIVE_SPECIES configuration
+│   ├── constants.py         # Global engine, window geometry & UI constants
+│   ├── utils.py             # Math helpers & dynamic SpeciesStats tracker
+│   └── main.py              # Convenience launcher alias
+├── world/
+│   ├── __init__.py
+│   ├── world.py             # Dynamic arena container & entity lifecycle management
+│   ├── entity.py            # Abstract Entity base class for passive objects
+│   ├── food.py              # Concrete Food entity inheriting from Entity
+│   ├── physics.py           # Optimized SpatialHash & generic collision resolution
+│   └── environment.py       # EnvironmentSystem for dynamic food spawning & weather hooks
+├── species/
+│   ├── __init__.py
+│   ├── creature.py          # Abstract Creature base class (spatial state, vitals, AI hooks)
+│   ├── ant.py               # Ant species implementation inheriting from Creature
+│   ├── ant_constants.py     # Dedicated Ant parameters & fitness weights
+│   ├── spider.py            # Spider species implementation inheriting from Creature
+│   └── spider_constants.py  # Dedicated Spider parameters & fitness weights
+├── evolution/
+│   ├── __init__.py
+│   ├── brain.py             # Neural network wrapper (22→8→3, genome decoding/encoding)
+│   ├── network.py           # Generic feedforward NeuralNetwork architecture
+│   ├── sensors.py           # Generic vision rays & density perception (species agnostic)
+│   └── genetics.py          # Truncation parent selection & Gaussian mutation algorithms
+├── rendering/
+│   ├── __init__.py
+│   ├── renderer.py          # Pygame visualization & dynamic sprite loader
+│   └── ui.py                # Top HUD overlays & miniature creature health bars
+├── main.py                  # Root entry point script
+├── __main__.py              # Package entry point (python -m ants_world or python .)
+└── README.md                # Project documentation
 ```
 
 ### Module Dependency Graph
 
 ```
-main.py
- ├── simulation.py
- │    └── world.py
- │         ├── ant.py ──────┐
- │         ├── predator.py ─┤
- │         ├── food.py      ├── brain.py ─── constants.py
- │         └── genetics.py  ├── sensors.py ─ constants.py, utils.py
- │                          └── constants.py
- └── renderer.py ─── constants.py
+main.py / core.engine
+ ├── core.simulation
+ │    ├── world.world
+ │    │    ├── world.physics (SpatialHash, combat & collision resolution)
+ │    │    ├── world.environment (Dynamic food spawning & weather hooks)
+ │    │    ├── species.ant ───────> species.creature ──> evolution.brain & evolution.sensors
+ │    │    ├── species.spider ────> species.creature ──> evolution.brain & evolution.sensors
+ │    │    ├── world.food ────────> world.entity
+ │    │    └── evolution.genetics
+ │    └── core.constants & core.utils
+ └── rendering.renderer
+      └── rendering.ui
 ```
 
-Key design decisions:
-- **`renderer.py`** has read-only access to the world — it never modifies state. The simulation runs headless without it.
-- **`constants.py`** is the single source of truth for all parameters. No magic numbers in the codebase.
-- **`brain.py`** uses no ML libraries — the forward pass is manual NumPy for transparency.
+### Architectural Design Decisions
+- **`Creature` & `Entity` Abstractions**: All active agents inherit from `Creature`, while passive objects inherit from `Entity`. Common physics, vitals, neural hooks, and communication stubs live in the base classes.
+- **`ACTIVE_SPECIES` Isolation Engine**: In `core/simulation.py`, the `ACTIVE_SPECIES = [Ant, Spider]` list dictates which species exist. You can drop new species into this list or test a single species in isolation (`ACTIVE_SPECIES = [Ant]`) without changing any loop logic.
+- **Generic Sensing & Collision Resolution**: `world/physics.py` and `evolution/sensors.py` never hardcode class names. Combat and vision checks identify opponents dynamically by comparing class types.
+- **Decoupled Renderer**: `rendering/renderer.py` operates in read-only mode and loads sprites dynamically based on `species_name`. If a PNG is missing, it falls back cleanly to geometric rendering.
 
 ---
 
 ## Key Constants
 
-All tunable parameters live in [`constants.py`](ant_simulator/constants.py). The most impactful ones:
+All tunable parameters are decoupled into logical modules:
 
-| Constant | Value | Impact |
-|----------|-------|--------|
-| `MUTATION_STRENGTH` | 0.1 | Higher = faster but noisier evolution |
-| `HEALTH_DECAY_RATE` | 2.0 HP/s | Forces creatures to eat; too high = die before learning |
-| `ANT_DUPLICATION_TIME` | 20s | Lower = faster population growth |
-| `MAX_ANTS` / `MAX_SPIDERS` | 300 / 100 | Population caps; too high = slow frames |
-| `SENSOR_ANGLE` | 50° | Narrower = more scanning needed, wider = less blind spots |
-| `NN_HIDDEN` | 8 | More neurons = more capacity but slower evolution |
+| Constant | Location | Impact |
+|----------|----------|--------|
+| `ACTIVE_SPECIES` | `core/simulation.py` | Defines active co-evolving species in the arena |
+| `MUTATION_STRENGTH` | `core/constants.py` | Higher = faster but noisier evolutionary jumps |
+| `HEALTH_DECAY_RATE` | `core/constants.py` | Forces creatures to forage; too high = die before learning |
+| `MAX_ANTS` / `MAX_SPIDERS` | `species/*_constants.py` | Population caps for dynamic spawn scaling |
+| `SENSOR_ANGLE` | `core/constants.py` | Narrower = more scanning needed, wider = fewer blind spots |
+| `NN_HIDDEN` | `core/constants.py` | Number of hidden neurons in the brain architecture |
 
 ---
 
@@ -252,8 +281,8 @@ No other dependencies. No ML frameworks.
 
 Common extension points:
 
-- **New inputs**: Add fields to `SensorData` in `sensors.py`, update `to_array()`, and increment `NN_INPUTS` in `constants.py`. The brain auto-adapts.
-- **New outputs**: Add a 3rd output (e.g. `attack_intent`) by increasing `NN_OUTPUTS` and updating the post-processing in `brain.py`'s `forward()`.
-- **New entities**: Follow the `Food` pattern — create a class with `position`, `radius`, and a consumed/alive flag. Register it in `world.py`.
-- **Different evolution**: Modify `genetics.py` — add crossover, tournament selection, or speciation.
-- **Headless mode**: Instantiate `Simulation` without `Renderer` and call `step()` in a loop. No Pygame needed.
+- **New Species**: Create `species/beetle.py` inheriting from `Creature`, define its parameters in `beetle_constants.py`, add a sprite to `assets/beetle.png`, and add `Beetle` to `ACTIVE_SPECIES` in `core/simulation.py`.
+- **New Inputs**: Add fields to `SensorData` in `evolution/sensors.py`, update `to_array()`, and increment `NN_INPUTS` in `core/constants.py`. The brain auto-adapts.
+- **New Outputs**: Add an output by increasing `NN_OUTPUTS` in `core/constants.py` and updating post-processing in `evolution/brain.py`.
+- **Environmental Mechanics**: Implement custom weather, seasonal cycles, or obstacles inside `world/environment.py`.
+- **Headless Mode**: Instantiate `Simulation` without `Renderer` and call `step(dt)` in a script loop for high-speed evolutionary training.

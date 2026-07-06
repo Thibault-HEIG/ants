@@ -2,7 +2,7 @@
 simulation.py — Simulation Orchestrator and ACTIVE_SPECIES Engine
 =================================================================
 
-Manages the simulation lifecycle, multi-species generation transitions,
+Manages the simulation lifecycle, multi-species continuous evolution,
 speed multipliers, and the core ACTIVE_SPECIES list for dynamic isolation
 or multi-species ecosystem testing.
 """
@@ -13,15 +13,20 @@ from typing import Any
 
 import numpy as np
 
-from core.constants import RANDOM_SEED, ROUND_TIME_LIMIT, SPEED_MULTIPLIERS, ACTIVE_SPECIES
-from evolution.genetics import create_next_generation
+from core.constants import RANDOM_SEED, SPEED_MULTIPLIERS
 from species.ant import Ant
-from species.spider import Spider, Predator
+from species.spider import Spider
 from world.world import World
+
+# ---------------------------------------------------------------------------
+# Core ACTIVE_SPECIES Configuration
+# Modify this list for seamless isolation testing (e.g. ACTIVE_SPECIES = [Ant])
+# ---------------------------------------------------------------------------
+ACTIVE_SPECIES: list[type] = [Ant, Spider]
 
 
 class Simulation:
-    """High-level simulation controller and generation orchestrator.
+    """High-level continuous simulation controller and evolutionary orchestrator.
 
     Parameters
     ----------
@@ -40,7 +45,6 @@ class Simulation:
         self.active_species: list[type] = list(active_species if active_species is not None else ACTIVE_SPECIES)
 
         self.world: World = World(self.rng, active_species=self.active_species)
-        self.generation: int = 1
         self.running: bool = True
         self.speed_idx: int = 1  # Index 1 -> 1x speed in SPEED_MULTIPLIERS
 
@@ -59,7 +63,7 @@ class Simulation:
         self.speed_idx = max(0, min(idx, len(SPEED_MULTIPLIERS) - 1))
 
     def step(self, dt: float) -> None:
-        """Advance simulation by one frame, handling generation transitions."""
+        """Advance simulation by one frame with continuous real-time reproduction."""
         if not self.running:
             return
 
@@ -70,33 +74,6 @@ class Simulation:
             current_total = len(self.world.creatures.get(cls, [])) + len(self.world.dead_creatures.get(cls, []))
             if current_total > self.total_spawned.get(cls, 0):
                 self.total_spawned[cls] = current_total
-
-        # Check generation reset condition
-        alive_counts = {cls: len(self.world.creatures.get(cls, [])) for cls in self.active_species}
-        should_reset = self.world.round_time >= ROUND_TIME_LIMIT
-        if len(self.active_species) > 1 and any(count == 0 for count in alive_counts.values()):
-            should_reset = True
-
-        if should_reset:
-            self._next_generation()
-
-    def _next_generation(self) -> None:
-        """Trigger evolutionary selection, breeding, and reset arena."""
-        self.generation += 1
-        new_genomes = {}
-
-        for cls in self.active_species:
-            all_creatures = self.world.creatures.get(cls, []) + self.world.dead_creatures.get(cls, [])
-            if all_creatures:
-                new_genomes[cls] = create_next_generation(
-                    all_creatures, getattr(cls, "initial_count", 10), self.rng
-                )
-            else:
-                new_genomes[cls] = None
-
-        self.world.reset_with_genomes(new_genomes)
-        for cls in self.active_species:
-            self.total_spawned[cls] = max(self.total_spawned.get(cls, 0), len(self.world.creatures.get(cls, [])))
 
     def get_total_spawned(self, cls: type) -> int:
         """Return historical peak population for a given species class."""
@@ -118,13 +95,8 @@ class Simulation:
 
     @property
     def total_spiders_spawned(self) -> int:
-        if Spider in self.total_spawned:
-            return self.total_spawned[Spider]
-        return self.get_total_spawned(Predator)
+        return self.get_total_spawned(Spider)
 
     @total_spiders_spawned.setter
     def total_spiders_spawned(self, value: int) -> None:
-        if Spider in self.total_spawned:
-            self.total_spawned[Spider] = value
-        else:
-            self.total_spawned[Predator] = value
+        self.total_spawned[Spider] = value

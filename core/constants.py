@@ -8,8 +8,6 @@ modules within the /species package.
 """
 
 import math
-from species.ant import Ant
-from species.spider import Spider
 
 # ---------------------------------------------------------------------------
 # World geometry
@@ -17,17 +15,12 @@ from species.spider import Spider
 WORLD_WIDTH: int = 1200   # pixels
 WORLD_HEIGHT: int = 800   # pixels
 
-# ---------------------------------------------------------------------------
-# Core ACTIVE_SPECIES Configuration
-# Modify this list for seamless isolation testing (e.g. ACTIVE_SPECIES = [Ant, Spider])
-# ---------------------------------------------------------------------------
-ACTIVE_SPECIES: list[type] = [Ant, Spider]
 
 # ---------------------------------------------------------------------------
 # General Lifecycle & World Settings
 # ---------------------------------------------------------------------------
 HEALTH_DECAY_RATE: float = 2.0        # HP lost per second
-ROUND_TIME_LIMIT: float = 150.0       # seconds — round ends if neither side is eliminated
+MAX_AGE_NORMALIZATION: float = 100.0  # seconds — used to normalize age for neural network inputs
 
 # ---------------------------------------------------------------------------
 # Food parameters

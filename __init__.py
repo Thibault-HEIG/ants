@@ -2,10 +2,8 @@
 Ant Colony Evolution Simulator
 ==============================
 
-A neural-network-driven ant colony simulation where ants evolve over
-successive generations to forage food and avoid predators.
+A neural-network-driven multi-species simulation where species (such as Ants and Spiders) continuously co-evolve to forage food, compete, and survive. While spiders are traditionally viewed as predators, in this scalable ecosystem every species is effectively a predator to competing species.
 
-Each ant carries a small neural network (its "brain") whose weights are
-encoded as a flat genome vector.  A genetic algorithm selects the fittest
-ants each generation and breeds the next population from their genomes.
+Each creature carries a small neural network (its "brain") whose weights are
+encoded as a flat genome vector. Creatures reproduce continuously during the simulation based on fitness, spawning mutated offspring to drive real-time evolution.
 """
