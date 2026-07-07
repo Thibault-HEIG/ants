@@ -19,6 +19,7 @@ ANT_STRIKE_RANGE: float = 20.0
 ANT_TURN_RATE: float = 3.0
 ANT_DAMAGE: float = 50.0
 ANT_ATTACK_COST: float = 20.0
+ANT_EATING_TIME: float = 1.0
 
 # Sensory Capacities
 ANT_SENSOR_RANGE: float = 150.0

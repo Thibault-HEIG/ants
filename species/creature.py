@@ -21,7 +21,6 @@ from core.constants import (
     HEALTH_DECAY_RATE,
     MAX_AGE_NORMALIZATION,
     ZONE_BOUNDARY_X,
-    EAT_DURATION,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -50,6 +49,7 @@ class Creature(ABC):
     turn_rate: float = 2.0
     damage: float = 10.0
     attack_cost: float = 5.0
+    eating_time: float = 1.0
     sensor_range: float = 100.0
     reproduction_threshold: float = 200.0
     max_population: int = 100
@@ -67,6 +67,7 @@ class Creature(ABC):
         turn_rate: float | None = None,
         damage: float | None = None,
         attack_cost: float | None = None,
+        eating_time: float | None = None,
         sensor_range: float | None = None,
         sensor_angle: float | None = None,
         density_radius: float | None = None,
@@ -88,6 +89,7 @@ class Creature(ABC):
         self._turn_rate: float = turn_rate if turn_rate is not None else self.turn_rate
         self.damage: float = damage if damage is not None else self.damage
         self._attack_cost: float = attack_cost if attack_cost is not None else self.attack_cost
+        self.eating_time: float = float(eating_time if eating_time is not None else self.eating_time)
 
         # --- AI & Sensory components ---
         s_range = sensor_range if sensor_range is not None else self.sensor_range
@@ -132,7 +134,7 @@ class Creature(ABC):
 
         Eating state machine:
         - When the NN outputs eat=1 and the creature is not already eating,
-          it enters the eating state (is_eating=True, eat_timer=EAT_DURATION).
+          it enters the eating state (is_eating=True, eat_timer=self.eating_time).
         - While eating: creature is frozen (no movement, no turning, no attacking).
         - When eat_timer expires: physics.resolve_food_collisions picks up the
           food if any is nearby, then resets is_eating.
@@ -165,7 +167,7 @@ class Creature(ABC):
             # Check if creature wants to start eating
             if eat_signal > 0.5:
                 self.is_eating = True
-                self.eat_timer = EAT_DURATION
+                self.eat_timer = self.eating_time
                 self.speed = 0.0
                 self.is_attacking = False
             else:

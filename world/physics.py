@@ -143,7 +143,7 @@ def resolve_food_collisions(
       3. There is unconsumed food within EAT_PICKUP_RADIUS.
 
     If no food is nearby when eating completes, the creature gets nothing
-    but the eating state is still reset (it wasted 2 seconds).
+    but the eating state is still reset (it wasted its eating time).
     """
     if not food_items:
         return

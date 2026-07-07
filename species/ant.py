@@ -20,6 +20,7 @@ from species.ant_constants import (
     ANT_TURN_RATE,
     ANT_DAMAGE,
     ANT_ATTACK_COST,
+    ANT_EATING_TIME,
     ANT_SENSOR_RANGE,
     ANT_REPRODUCTION_THRESHOLD,
     MAX_ANTS,
@@ -49,6 +50,7 @@ class Ant(Creature):
     turn_rate: float = ANT_TURN_RATE
     damage: float = ANT_DAMAGE
     attack_cost: float = ANT_ATTACK_COST
+    eating_time: float = ANT_EATING_TIME
     sensor_range: float = ANT_SENSOR_RANGE
     reproduction_threshold: float = ANT_REPRODUCTION_THRESHOLD
     max_population: int = MAX_ANTS
@@ -65,6 +67,7 @@ class Ant(Creature):
             turn_rate=ANT_TURN_RATE,
             damage=ANT_DAMAGE,
             attack_cost=ANT_ATTACK_COST,
+            eating_time=ANT_EATING_TIME,
             sensor_range=ANT_SENSOR_RANGE,
             density_radius=DENSITY_RADIUS_ANT,
         )

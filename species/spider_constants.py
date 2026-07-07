@@ -19,6 +19,7 @@ SPIDER_STRIKE_RANGE: float = 35.0
 SPIDER_TURN_RATE: float = 1.0
 SPIDER_DAMAGE: float = 80.0
 SPIDER_ATTACK_COST: float = 30.0
+SPIDER_EATING_TIME: float = 2.0
 
 # Sensory Capacities
 SPIDER_SENSOR_RANGE: float = 250.0

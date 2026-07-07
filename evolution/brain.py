@@ -2,7 +2,7 @@
 brain.py — Neural Network "Brain" for Creatures
 ===============================================
 
-Wraps the generic NeuralNetwork with creature-specific dimensions (22→8→4),
+Wraps the generic NeuralNetwork with creature-specific dimensions (31→16→8→4),
 motor command interpretation, and genome vector encoding/decoding.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.constants import NN_INPUTS, NN_HIDDEN, NN_OUTPUTS, GENOME_SIZE
+from core.constants import NN_INPUTS, NN_HIDDEN_1, NN_HIDDEN_2, NN_OUTPUTS, GENOME_SIZE
 from evolution.network import NeuralNetwork
 
 
@@ -26,7 +26,8 @@ class Brain:
     def __init__(self, rng: np.random.Generator) -> None:
         self.net: NeuralNetwork = NeuralNetwork(
             input_size=NN_INPUTS,
-            hidden_size=NN_HIDDEN,
+            hidden1_size=NN_HIDDEN_1,
+            hidden2_size=NN_HIDDEN_2,
             output_size=NN_OUTPUTS,
             rng=rng,
         )
@@ -36,28 +37,44 @@ class Brain:
     # ------------------------------------------------------------------
 
     @property
-    def weights_input_hidden(self) -> np.ndarray:
-        return self.net.weights_input_hidden
+    def weights_input_hidden1(self) -> np.ndarray:
+        return self.net.weights_input_hidden1
 
-    @weights_input_hidden.setter
-    def weights_input_hidden(self, val: np.ndarray) -> None:
-        self.net.weights_input_hidden = val
-
-    @property
-    def bias_hidden(self) -> np.ndarray:
-        return self.net.bias_hidden
-
-    @bias_hidden.setter
-    def bias_hidden(self, val: np.ndarray) -> None:
-        self.net.bias_hidden = val
+    @weights_input_hidden1.setter
+    def weights_input_hidden1(self, val: np.ndarray) -> None:
+        self.net.weights_input_hidden1 = val
 
     @property
-    def weights_hidden_output(self) -> np.ndarray:
-        return self.net.weights_hidden_output
+    def bias_hidden1(self) -> np.ndarray:
+        return self.net.bias_hidden1
 
-    @weights_hidden_output.setter
-    def weights_hidden_output(self, val: np.ndarray) -> None:
-        self.net.weights_hidden_output = val
+    @bias_hidden1.setter
+    def bias_hidden1(self, val: np.ndarray) -> None:
+        self.net.bias_hidden1 = val
+
+    @property
+    def weights_hidden1_hidden2(self) -> np.ndarray:
+        return self.net.weights_hidden1_hidden2
+
+    @weights_hidden1_hidden2.setter
+    def weights_hidden1_hidden2(self, val: np.ndarray) -> None:
+        self.net.weights_hidden1_hidden2 = val
+
+    @property
+    def bias_hidden2(self) -> np.ndarray:
+        return self.net.bias_hidden2
+
+    @bias_hidden2.setter
+    def bias_hidden2(self, val: np.ndarray) -> None:
+        self.net.bias_hidden2 = val
+
+    @property
+    def weights_hidden2_output(self) -> np.ndarray:
+        return self.net.weights_hidden2_output
+
+    @weights_hidden2_output.setter
+    def weights_hidden2_output(self, val: np.ndarray) -> None:
+        self.net.weights_hidden2_output = val
 
     @property
     def bias_output(self) -> np.ndarray:
@@ -76,7 +93,7 @@ class Brain:
 
         Parameters
         ----------
-        inputs : np.ndarray, shape (22,)
+        inputs : np.ndarray, shape (31,)
             Normalised sensor readings and internal state vector.
 
         Returns
@@ -103,11 +120,13 @@ class Brain:
     # ------------------------------------------------------------------
 
     def get_genome(self) -> np.ndarray:
-        """Flatten all weights and biases into a single 1-D vector (size 219)."""
+        """Flatten all weights and biases into a single 1-D vector (size 684)."""
         return np.concatenate([
-            self.weights_input_hidden.flatten(),
-            self.bias_hidden.flatten(),
-            self.weights_hidden_output.flatten(),
+            self.weights_input_hidden1.flatten(),
+            self.bias_hidden1.flatten(),
+            self.weights_hidden1_hidden2.flatten(),
+            self.bias_hidden2.flatten(),
+            self.weights_hidden2_output.flatten(),
             self.bias_output.flatten(),
         ])
 
@@ -119,20 +138,29 @@ class Brain:
 
         idx = 0
 
-        size_ih = NN_INPUTS * NN_HIDDEN
-        self.weights_input_hidden = genome[idx:idx + size_ih].reshape(
-            NN_INPUTS, NN_HIDDEN
+        size_ih1 = NN_INPUTS * NN_HIDDEN_1
+        self.weights_input_hidden1 = genome[idx:idx + size_ih1].reshape(
+            NN_INPUTS, NN_HIDDEN_1
         )
-        idx += size_ih
+        idx += size_ih1
 
-        self.bias_hidden = genome[idx:idx + NN_HIDDEN].copy()
-        idx += NN_HIDDEN
+        self.bias_hidden1 = genome[idx:idx + NN_HIDDEN_1].copy()
+        idx += NN_HIDDEN_1
 
-        size_ho = NN_HIDDEN * NN_OUTPUTS
-        self.weights_hidden_output = genome[idx:idx + size_ho].reshape(
-            NN_HIDDEN, NN_OUTPUTS
+        size_h1h2 = NN_HIDDEN_1 * NN_HIDDEN_2
+        self.weights_hidden1_hidden2 = genome[idx:idx + size_h1h2].reshape(
+            NN_HIDDEN_1, NN_HIDDEN_2
         )
-        idx += size_ho
+        idx += size_h1h2
+
+        self.bias_hidden2 = genome[idx:idx + NN_HIDDEN_2].copy()
+        idx += NN_HIDDEN_2
+
+        size_h2o = NN_HIDDEN_2 * NN_OUTPUTS
+        self.weights_hidden2_output = genome[idx:idx + size_h2o].reshape(
+            NN_HIDDEN_2, NN_OUTPUTS
+        )
+        idx += size_h2o
 
         self.bias_output = genome[idx:idx + NN_OUTPUTS].copy()
 
