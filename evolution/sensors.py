@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class RayResult:
-    """The raw distance measurements from a single ray.
+    """The raw distance and state measurements from a single ray.
 
     Values are normalised (inverted):
       0.0 = nothing detected within max range
@@ -39,15 +39,25 @@ class RayResult:
     """
     food_distance: float = 0.0
     enemy_distance: float = 0.0
+    enemy_is_eating: float = 0.0
+    enemy_is_attacking: float = 0.0
+    ally_distance: float = 0.0
+    ally_is_eating: float = 0.0
+    ally_is_attacking: float = 0.0
     wall_distance: float = 0.0
 
 
 @dataclass
 class SectorReading:
     """Readings from a single directional sensor sector."""
-    enemy_distance: float = 0.0   # inverted: 0 = no enemy, 1 = touching
-    food_distance: float = 0.0    # inverted: 0 = no food, 1 = touching
-    wall_distance: float = 0.0    # inverted: 0 = no wall, 1 = touching
+    enemy_distance: float = 0.0       # inverted: 0 = no enemy, 1 = touching
+    enemy_is_eating: float = 0.0      # {0, 1}: 1 if seen enemy is eating
+    enemy_is_attacking: float = 0.0   # {0, 1}: 1 if seen enemy is attacking
+    ally_distance: float = 0.0        # inverted: 0 = no ally, 1 = touching
+    ally_is_eating: float = 0.0       # {0, 1}: 1 if seen ally is eating
+    ally_is_attacking: float = 0.0    # {0, 1}: 1 if seen ally is attacking
+    food_distance: float = 0.0        # inverted: 0 = no food, 1 = touching
+    wall_distance: float = 0.0        # inverted: 0 = no wall, 1 = touching
 
 
 def _default_sectors() -> list[SectorReading]:
@@ -70,21 +80,26 @@ class SensorData:
     has_gained_hp: float = 0.0   # {0, 1}
 
     def to_array(self, hp: float, zone: float, speed: float, age: float) -> np.ndarray:
-        """Convert sensor readings + internal state into a 31-element input vector.
+        """Convert sensor readings + internal state into a 71-element input vector.
 
         Layout:
-          [0..23]  8 sectors × 3 features [enemy_dist, food_dist, wall_dist]
-          [24..30] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp]
+          [0..63]  8 sectors × 8 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist]
+          [64..70] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp]
         """
-        arr = np.empty(NN_NUM_SENSORS * 3 + 7, dtype=float)
+        arr = np.empty(NN_NUM_SENSORS * 8 + 7, dtype=float)
 
-        # Pack sector readings: 8 sectors × 3 features
+        # Pack sector readings: 8 sectors × 8 features
         idx = 0
         for sector in self.sectors:
             arr[idx] = sector.enemy_distance
-            arr[idx + 1] = sector.food_distance
-            arr[idx + 2] = sector.wall_distance
-            idx += 3
+            arr[idx + 1] = sector.enemy_is_eating
+            arr[idx + 2] = sector.enemy_is_attacking
+            arr[idx + 3] = sector.ally_distance
+            arr[idx + 4] = sector.ally_is_eating
+            arr[idx + 5] = sector.ally_is_attacking
+            arr[idx + 6] = sector.food_distance
+            arr[idx + 7] = sector.wall_distance
+            idx += 8
 
         # Pack state inputs
         arr[idx] = hp
@@ -118,14 +133,14 @@ class SensorRay:
         origin: np.ndarray,
         heading: float,
         food_targets: list[tuple[float, float, float]],
-        enemy_targets: list[tuple[float, float, float]],
+        enemy_targets: list[tuple[float, float, float, bool, bool]],
+        ally_targets: list[tuple[float, float, float, bool, bool]],
         world_width: float,
         world_height: float,
     ) -> RayResult:
-        """Cast this ray and find the nearest food, enemy, and wall.
+        """Cast this ray and find the nearest food, enemy, ally, and wall.
 
-        Targets are pre-extracted as (x, y, radius) tuples to avoid
-        repeated attribute lookups inside the hot loop.
+        Targets are pre-extracted as tuples to avoid repeated attribute lookups inside the hot loop.
         """
         ray_angle = heading + self.angle_offset
         rdx = math.cos(ray_angle)
@@ -136,7 +151,8 @@ class SensorRay:
         oy = float(origin[1])
 
         result.food_distance = self._detect_nearest(ox, oy, rdx, rdy, food_targets)
-        result.enemy_distance = self._detect_nearest(ox, oy, rdx, rdy, enemy_targets)
+        result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
+        result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
         result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height)
 
         return result
@@ -188,6 +204,53 @@ class SensorRay:
             # Nothing detected within range
             return 0.0
         return max(0.0, 1.0 - raw)
+
+    def _detect_creature(
+        self,
+        ox: float, oy: float,
+        rdx: float, rdy: float,
+        targets: list[tuple[float, float, float, bool, bool]],
+    ) -> tuple[float, float, float]:
+        """Find the nearest creature target along the ray direction and report its state.
+
+        Returns (inverted_distance, is_eating, is_attacking):
+          distance: 0.0 = nothing detected, 1.0 = touching.
+          is_eating: 1.0 if eating, 0.0 otherwise.
+          is_attacking: 1.0 if attacking, 0.0 otherwise.
+        """
+        max_range = self.max_range
+        nearest = max_range
+        nearest_eat = 0.0
+        nearest_atk = 0.0
+
+        for tx, ty, tradius, is_eat, is_atk in targets:
+            dx = tx - ox
+            dy = ty - oy
+            dist_sq = dx * dx + dy * dy
+
+            if dist_sq < 1e-12:
+                return 1.0, 1.0 if is_eat else 0.0, 1.0 if is_atk else 0.0
+
+            if dist_sq > max_range * max_range:
+                continue
+
+            dot = dx * rdx + dy * rdy
+            if dot < 0.0:
+                continue
+
+            perp_sq = dist_sq - dot * dot
+            hit_tol = tradius + 15.0
+            hit_tol_sq = hit_tol * hit_tol
+
+            if perp_sq <= hit_tol_sq and dot < nearest:
+                nearest = dot
+                nearest_eat = 1.0 if is_eat else 0.0
+                nearest_atk = 1.0 if is_atk else 0.0
+
+        raw = nearest / max_range
+        if raw >= 1.0:
+            return 0.0, 0.0, 0.0
+        return max(0.0, 1.0 - raw), nearest_eat, nearest_atk
 
     def _detect_wall(
         self,
@@ -281,10 +344,10 @@ class Sensors:
         if spatial_hash is not None:
             nearby = spatial_hash.query(position, max(sr, dr))
 
-            # Pre-extract (x, y, radius) tuples, filtering by category
+            # Pre-extract tuples, filtering by category
             food_targets: list[tuple[float, float, float]] = []
-            enemy_targets: list[tuple[float, float, float]] = []
-            ally_targets: list[tuple[float, float, float]] = []
+            enemy_targets: list[tuple[float, float, float, bool, bool]] = []
+            ally_targets: list[tuple[float, float, float, bool, bool]] = []
 
             enemy_ids = set(id(e) for e in enemies)
             ally_ids = set(id(a) for a in allies)
@@ -300,14 +363,14 @@ class Sensors:
                         food_targets.append((px, py, float(n.radius)))
                 elif nid in enemy_ids:
                     if getattr(n, 'alive', True):
-                        enemy_targets.append((px, py, float(n.radius)))
+                        enemy_targets.append((px, py, float(n.radius), bool(getattr(n, 'is_eating', False)), bool(getattr(n, 'is_attacking', False))))
                 elif nid in ally_ids:
                     if getattr(n, 'alive', True):
                         # Exclude self
                         ddx = px - ox
                         ddy = py - oy
                         if ddx * ddx + ddy * ddy > 0.01:
-                            ally_targets.append((px, py, float(n.radius)))
+                            ally_targets.append((px, py, float(n.radius), bool(getattr(n, 'is_eating', False)), bool(getattr(n, 'is_attacking', False))))
         else:
             # Fallback: full-list mode (no spatial hash available)
             food_targets = [
@@ -315,11 +378,11 @@ class Sensors:
                 for f in food_items if not getattr(f, 'consumed', False)
             ]
             enemy_targets = [
-                (float(e.position[0]), float(e.position[1]), float(e.radius))
+                (float(e.position[0]), float(e.position[1]), float(e.radius), bool(getattr(e, 'is_eating', False)), bool(getattr(e, 'is_attacking', False)))
                 for e in enemies if getattr(e, 'alive', True)
             ]
             ally_targets = [
-                (float(a.position[0]), float(a.position[1]), float(a.radius))
+                (float(a.position[0]), float(a.position[1]), float(a.radius), bool(getattr(a, 'is_eating', False)), bool(getattr(a, 'is_attacking', False)))
                 for a in allies if getattr(a, 'alive', True)
                 and math.hypot(a.position[0] - ox, a.position[1] - oy) > 0.1
             ]
@@ -329,10 +392,15 @@ class Sensors:
         # -----------------------------------------------------------------
         for i, ray in enumerate(self.rays):
             ray_res = ray.cast(
-                position, direction, food_targets, enemy_targets,
+                position, direction, food_targets, enemy_targets, ally_targets,
                 world_width, world_height,
             )
             data.sectors[i].enemy_distance = ray_res.enemy_distance
+            data.sectors[i].enemy_is_eating = ray_res.enemy_is_eating
+            data.sectors[i].enemy_is_attacking = ray_res.enemy_is_attacking
+            data.sectors[i].ally_distance = ray_res.ally_distance
+            data.sectors[i].ally_is_eating = ray_res.ally_is_eating
+            data.sectors[i].ally_is_attacking = ray_res.ally_is_attacking
             data.sectors[i].food_distance = ray_res.food_distance
             data.sectors[i].wall_distance = ray_res.wall_distance
 
@@ -347,7 +415,7 @@ class Sensors:
     def _count_density(
         self,
         ox: float, oy: float,
-        targets: list[tuple[float, float, float]],
+        targets: list[Any],
     ) -> float:
         """Count how many targets are within the density radius.
 
@@ -356,9 +424,9 @@ class Sensors:
         dr_sq = self.density_radius * self.density_radius
         count = 0
 
-        for tx, ty, _ in targets:
-            dx = tx - ox
-            dy = ty - oy
+        for target in targets:
+            dx = target[0] - ox
+            dy = target[1] - oy
             if dx * dx + dy * dy <= dr_sq:
                 count += 1
 

@@ -108,11 +108,18 @@ class Creature(ABC):
         self.food_eaten: int = 0
         self.survival_time: float = 0.0
         self.enemies_touched: int = 0
+        self.times_eating_for_nothing: int = 0
+        self.times_attacking_for_nothing: int = 0
         self.is_attacking: bool = False
 
         # --- Eating state machine ---
         self.is_eating: bool = False
         self.eat_timer: float = 0.0
+
+        # --- HP gain tracking ("has gained HP in the last second") ---
+        self._hp_snapshot: float = self.health
+        self._hp_timer: float = 0.0
+        self._has_gained_hp: bool = False
 
     @property
     def hunger(self) -> float:
@@ -142,12 +149,20 @@ class Creature(ABC):
         if not self.alive:
             return
 
+        # --- HP gain tracking (rolling 1-second window) ---
+        self._hp_timer += dt
+        if self._hp_timer >= 1.0:
+            self._has_gained_hp = self.health > self._hp_snapshot
+            self._hp_snapshot = self.health
+            self._hp_timer = 0.0
+
         hp_normalized = self.health / self.max_health
         zone = 1.0 if self.position[0] >= ZONE_BOUNDARY_X else 0.0
         effective_max_speed = self.get_effective_max_speed(zone)
         speed_normalized = self.speed / effective_max_speed if effective_max_speed > 0 else 0.0
         age_normalized = min(1.0, self.survival_time / MAX_AGE_NORMALIZATION) if MAX_AGE_NORMALIZATION > 0 else 0.0
 
+        sensor_data.has_gained_hp = 1.0 if self._has_gained_hp else 0.0
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 
         brain_output = self.brain.forward(inputs)

@@ -57,7 +57,7 @@ MAX_DENSITY_COUNT: int = 10             # normalisation cap: 10+ nearby → 1.0
 # Neural network architecture
 # ---------------------------------------------------------------------------
 NN_NUM_SENSORS: int = 8         # directional sensors evenly spanning the FOV
-NN_INPUTS: int = 31             # 8 sensors × 3 features + 7 state inputs
+NN_INPUTS: int = 71             # 8 sensors × 8 features + 7 state inputs
 NN_HIDDEN_1: int = 16           # first hidden layer
 NN_HIDDEN_2: int = 8            # second hidden layer
 NN_OUTPUTS: int = 4             # turn, speed, attack, eat
@@ -66,7 +66,7 @@ GENOME_SIZE: int = (
     (NN_INPUTS * NN_HIDDEN_1) + NN_HIDDEN_1 +
     (NN_HIDDEN_1 * NN_HIDDEN_2) + NN_HIDDEN_2 +
     (NN_HIDDEN_2 * NN_OUTPUTS) + NN_OUTPUTS
-)  # = 684
+)  # = 1324
 
 # ---------------------------------------------------------------------------
 # Genetic algorithm

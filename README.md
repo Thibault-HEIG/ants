@@ -41,8 +41,8 @@ Each creature runs this cycle **every frame**:
 Sense → Think → Act → Evolve
 ```
 
-1. **Sense** — Vision rays and omnidirectional sensors detect food, enemies, allies, and walls.
-2. **Think** — A neural network processes 22 sensor inputs and outputs `[turn, speed, attack]`.
+1. **Sense** — Eight directional vision rays and density sensors detect food, enemies, allies, and walls.
+2. **Think** — A neural network processes 71 sensor inputs and outputs `[turn, speed, attack, eat]`.
 3. **Act** — The creature moves and engages in combat according to the brain's decision.
 4. **Evolve** — Creatures that survive long enough reproduce (continuous evolution). Their children inherit mutated copies of the parent's brain weights.
 
@@ -77,71 +77,78 @@ Combat uses **Reach vs Hurtbox** mechanics — damage is dealt when a creature a
 
 ## Neural Network Architecture
 
-Each creature has an identical `22 → 8 → 3` fully-connected neural network (tanh activations, no ML libraries — pure NumPy).
+Each creature has an identical `71 → 16 → 8 → 4` fully-connected neural network (tanh activations, two hidden layers, no ML libraries — pure NumPy).
 
-### 22 Inputs
+### 71 Inputs
 
-| # | Input | Category |
-|---|-------|----------|
-| 0 | `enemy_right` | 👁️ Right ray |
-| 1 | `enemy_left` | 👁️ Left ray |
-| 2 | `zone` | 🧠 Internal (0 = Danger, 1 = Safe) |
-| 3 | `food_right` | 👁️ Right ray |
-| 4 | `food_left` | 👁️ Left ray |
-| 5 | `hp` | 🧠 Internal (0–1) |
-| 6 | `ally_left` | 👁️ Left ray |
-| 7 | `ally_right` | 👁️ Right ray |
-| 8 | `wall_left` | 👁️ Left ray |
-| 9 | `wall_right` | 👁️ Right ray |
-| 10 | `food_fwd` | 👁️ Forward ray |
-| 11 | `enemy_fwd` | 👁️ Forward ray |
-| 12 | `ally_fwd` | 👁️ Forward ray |
-| 13 | `wall_fwd` | 👁️ Forward ray |
-| 14 | `nearest_food_dist` | 👃 Omnidirectional |
-| 15 | `nearest_food_angle` | 👃 Omnidirectional |
-| 16 | `nearest_enemy_dist` | 👃 Omnidirectional |
-| 17 | `nearest_enemy_angle` | 👃 Omnidirectional |
-| 18 | `current_speed` | 🧠 Internal (0–1) |
-| 19 | `age` | 🧠 Internal (0–1) |
-| 20 | `ally_density` | 🐜 Teamwork (0–1) |
-| 21 | `enemy_density` | 🐜 Teamwork (0–1) |
+**8-Sector Vision (64 inputs)** — 8 directional sensors evenly distributed across the ±50° FOV. Each sensor reports 8 features using inverted convention for distances: `0.0` = nothing detected, `1.0` = touching.
 
-### 3 Outputs
+| Indices | Sensor | Angle Offset |
+|---------|--------|--------------|
+| 0–7 | Sensor 0 | −50.0° (leftmost) |
+| 8–15 | Sensor 1 | −35.7° |
+| 16–23 | Sensor 2 | −21.4° |
+| 24–31 | Sensor 3 | −7.1° |
+| 32–39 | Sensor 4 | +7.1° |
+| 40–47 | Sensor 5 | +21.4° |
+| 48–55 | Sensor 6 | +35.7° |
+| 56–63 | Sensor 7 | +50.0° (rightmost) |
+
+Each sensor outputs 8 values:
+
+| Feature | Range | Description |
+|---------|-------|-------------|
+| `enemy_distance` | [0, 1] | 0 = no enemy, 1 = touching |
+| `enemy_is_eating` | {0, 1} | 1 = seen enemy is eating |
+| `enemy_is_attacking` | {0, 1} | 1 = seen enemy is attacking |
+| `ally_distance` | [0, 1] | 0 = no ally, 1 = touching |
+| `ally_is_eating` | {0, 1} | 1 = seen ally is eating |
+| `ally_is_attacking` | {0, 1} | 1 = seen ally is attacking |
+| `food_distance` | [0, 1] | 0 = no food, 1 = touching |
+| `wall_distance` | [0, 1] | 0 = no wall in range, 1 = touching wall |
+
+**Internal State (7 inputs)**
+
+| # | Input | Range | Category |
+|---|-------|-------|----------|
+| 64 | `hp` | [0, 1] | 🧠 Internal |
+| 65 | `zone` | {0, 1} | 🧠 Internal (0 = Danger, 1 = Safe) |
+| 66 | `speed` | [0, 1] | 🧠 Internal |
+| 67 | `age` | [0, 1] | 🧠 Internal |
+| 68 | `ally_density` | [0, 1] | 🐜 Teamwork |
+| 69 | `enemy_density` | [0, 1] | 🐜 Teamwork |
+| 70 | `has_gained_hp` | {0, 1} | 🧠 Internal (HP increased in last second) |
+
+### 4 Outputs
 
 | Output | Range | Meaning |
 |--------|-------|---------|
 | `turn` | [-1, 1] | Negative = left, positive = right |
 | `speed` | [0, 1] | 0 = stop, 1 = full speed |
 | `attack` | {0, 1} | 0 = hold fire, 1 = attack (strike reach enabled) |
+| `eat` | {0, 1} | 0 = don't eat, 1 = attempt to eat |
 
 ### Genome
 
-The genome is a flat vector of **211 floats** — every weight and bias concatenated:
+The genome is a flat vector of **1324 floats** — every weight and bias concatenated:
 
 ```
-[weights_input→hidden (176)] [bias_hidden (8)] [weights_hidden→output (24)] [bias_output (3)]
+[w_input→hidden1 (1136)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (32)] [b_output (4)]
 ```
 
 ---
 
 ## Sensor System
 
-Creatures perceive the world through three complementary systems:
+Creatures perceive the world through two complementary systems:
 
-### 1. Vision Rays (directional)
+### 1. Directional Vision (8 sensors)
 
-Three rays extend from the creature at fixed angles relative to its heading:
-- **Left ray**: −50° offset
-- **Right ray**: +50° offset
-- **Forward ray**: 0° (straight ahead)
+Eight vision rays extend from the creature, evenly distributed across a ±50° field of view (100° total). Each ray detects the nearest enemy, ally, food, and wall along its direction. When an enemy or ally is detected, the sensor also reports whether that creature is currently eating (`is_eating`) or attacking (`is_attacking`).
 
-Each ray detects the nearest food, enemy, ally, and wall. Distances are normalised: `0.0` = touching, `1.0` = nothing within range.
+Distances use **inverted normalisation**: `0.0` = nothing within range, `1.0` = touching. A non-zero value implicitly indicates detection — no separate binary flag is needed.
 
-### 2. Omnidirectional Sensing ("smell")
-
-360° awareness of the nearest food and nearest enemy — returns both distance and relative angle ([-1, 1]). This lets the brain locate targets even outside the vision cone.
-
-### 3. Density Awareness (teamwork)
+### 2. Density Awareness (teamwork)
 
 Counts of nearby allies and enemies within sensor range, normalised by a cap of 10. This enables emergent swarming — an ant can "decide" to fight only when outnumbering the enemy.
 
@@ -213,9 +220,9 @@ ants-world/
 │   └── spider_constants.py  # Dedicated Spider parameters & fitness weights
 ├── evolution/
 │   ├── __init__.py
-│   ├── brain.py             # Neural network wrapper (22→8→3, genome decoding/encoding)
-│   ├── network.py           # Generic feedforward NeuralNetwork architecture
-│   ├── sensors.py           # Generic vision rays & density perception (species agnostic)
+│   ├── brain.py             # Neural network wrapper (71→16→8→4, genome decoding/encoding)
+│   ├── network.py           # Generic two-hidden-layer feedforward NeuralNetwork architecture
+│   ├── sensors.py           # 8-sector directional vision & density perception (species agnostic)
 │   └── genetics.py          # Truncation parent selection & Gaussian mutation algorithms
 ├── rendering/
 │   ├── __init__.py
@@ -262,7 +269,7 @@ All tunable parameters are decoupled into logical modules:
 | `HEALTH_DECAY_RATE` | `core/constants.py` | Forces creatures to forage; too high = die before learning |
 | `MAX_ANTS` / `MAX_SPIDERS` | `species/*_constants.py` | Population caps for dynamic spawn scaling |
 | `SENSOR_ANGLE` | `core/constants.py` | Narrower = more scanning needed, wider = fewer blind spots |
-| `NN_HIDDEN` | `core/constants.py` | Number of hidden neurons in the brain architecture |
+| `NN_HIDDEN_1` / `NN_HIDDEN_2` | `core/constants.py` | Number of hidden neurons in each brain layer (16, 8) |
 
 ---
 

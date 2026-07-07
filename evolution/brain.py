@@ -2,7 +2,7 @@
 brain.py — Neural Network "Brain" for Creatures
 ===============================================
 
-Wraps the generic NeuralNetwork with creature-specific dimensions (31→16→8→4),
+Wraps the generic NeuralNetwork with creature-specific dimensions (71→16→8→4),
 motor command interpretation, and genome vector encoding/decoding.
 """
 
@@ -93,7 +93,7 @@ class Brain:
 
         Parameters
         ----------
-        inputs : np.ndarray, shape (31,)
+        inputs : np.ndarray, shape (71,)
             Normalised sensor readings and internal state vector.
 
         Returns
@@ -120,7 +120,7 @@ class Brain:
     # ------------------------------------------------------------------
 
     def get_genome(self) -> np.ndarray:
-        """Flatten all weights and biases into a single 1-D vector (size 684)."""
+        """Flatten all weights and biases into a single 1-D vector (size 1324)."""
         return np.concatenate([
             self.weights_input_hidden1.flatten(),
             self.bias_hidden1.flatten(),

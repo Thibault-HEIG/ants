@@ -111,6 +111,7 @@ def resolve_combat(
                     if getattr(target, "alive", False)
                 ]
 
+            hit_any = False
             for target in candidates:
                 if not getattr(target, "alive", False):
                     continue
@@ -128,6 +129,10 @@ def resolve_combat(
                 if dx * dx + dy * dy < threshold * threshold:
                     target.take_damage(attacker.damage)
                     attacker.enemies_touched += 1
+                    hit_any = True
+
+            if not hit_any:
+                attacker.times_attacking_for_nothing += 1
 
 
 def resolve_food_collisions(
@@ -145,9 +150,6 @@ def resolve_food_collisions(
     If no food is nearby when eating completes, the creature gets nothing
     but the eating state is still reset (it wasted its eating time).
     """
-    if not food_items:
-        return
-
     pickup_radius_sq = EAT_PICKUP_RADIUS * EAT_PICKUP_RADIUS
 
     # Pre-build set of food ids for fast membership test when using spatial hash
@@ -190,6 +192,9 @@ def resolve_food_collisions(
                     creature.eat(food.on_consume())
                     food_found = True
                     break  # Only eat one food item per eating action
+
+            if not food_found:
+                creature.times_eating_for_nothing += 1
 
             # Reset eating state regardless of whether food was found
             creature.is_eating = False

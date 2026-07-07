@@ -206,10 +206,10 @@ class Renderer:
 
     def _draw_sensors(self, creature: Any) -> None:
         cx, cy = float(creature.position[0]), float(creature.position[1])
-        s_range = getattr(creature.sensors, "sensor_range", 100.0)
+        s_range = getattr(creature.sensors, 'sensor_range', 100.0)
 
-        # Draw vision rays
-        for ray in [creature.sensors.left_ray, creature.sensors.right_ray, creature.sensors.forward_ray]:
+        # Draw all 8 vision rays
+        for ray in creature.sensors.rays:
             ray_angle = creature.direction + ray.angle_offset
             ex = cx + math.cos(ray_angle) * s_range
             ey = cy + math.sin(ray_angle) * s_range
