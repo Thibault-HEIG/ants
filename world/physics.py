@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from core.constants import EAT_PICKUP_RADIUS
+
 if TYPE_CHECKING:
     from world.food import Food
 
@@ -133,17 +135,20 @@ def resolve_food_collisions(
     food_items: list[Any],
     spatial_hash: SpatialHash | None = None,
 ) -> None:
-    """Check food collisions for all active species and feed creatures when touching.
+    """Resolve food consumption for creatures that have finished eating.
 
-    When a spatial_hash is supplied, each creature queries only nearby food
-    instead of scanning the entire food list.
+    A creature only picks up food when:
+      1. It was eating (is_eating=True) AND
+      2. Its eat_timer has expired (eat_timer <= 0) AND
+      3. There is unconsumed food within EAT_PICKUP_RADIUS.
+
+    If no food is nearby when eating completes, the creature gets nothing
+    but the eating state is still reset (it wasted 2 seconds).
     """
     if not food_items:
         return
 
-    # Quick check: if all food consumed already, bail out
-    if all(getattr(f, "consumed", False) for f in food_items):
-        return
+    pickup_radius_sq = EAT_PICKUP_RADIUS * EAT_PICKUP_RADIUS
 
     # Pre-build set of food ids for fast membership test when using spatial hash
     food_ids: set[int] | None = None
@@ -155,17 +160,24 @@ def resolve_food_collisions(
             if not getattr(creature, "alive", False):
                 continue
 
+            # Only process creatures that have finished their eating animation
+            if not getattr(creature, "is_eating", False):
+                continue
+            if getattr(creature, "eat_timer", 1.0) > 0.0:
+                continue
+
+            # Eating timer expired — try to find food nearby
             cx = float(creature.position[0])
             cy = float(creature.position[1])
-            cr = creature.radius
 
             if spatial_hash is not None:
-                candidates = spatial_hash.query(creature.position, cr + 20.0)
+                candidates = spatial_hash.query(creature.position, EAT_PICKUP_RADIUS + 10.0)
             else:
                 candidates = food_items
 
+            food_found = False
             for food in candidates:
-                if spatial_hash is not None and id(food) not in food_ids:
+                if spatial_hash is not None and food_ids is not None and id(food) not in food_ids:
                     continue
                 if getattr(food, "consumed", False):
                     continue
@@ -174,6 +186,11 @@ def resolve_food_collisions(
                 fy = float(food.position[1])
                 dx = cx - fx
                 dy = cy - fy
-                threshold = cr + food.radius
-                if dx * dx + dy * dy < threshold * threshold:
+                if dx * dx + dy * dy < pickup_radius_sq:
                     creature.eat(food.on_consume())
+                    food_found = True
+                    break  # Only eat one food item per eating action
+
+            # Reset eating state regardless of whether food was found
+            creature.is_eating = False
+            creature.eat_timer = 0.0

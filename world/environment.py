@@ -2,24 +2,31 @@
 environment.py — Environmental Conditions and Dynamic Resource Spawning
 =======================================================================
 
-Provides the EnvironmentSystem hook for complex environmental features
-such as dynamic weather conditions, seasonal cycles, and food spawning.
+Manages FoodSource lifecycle: spawning new sources on a cooldown, updating
+existing sources (which scatter Sugar/Seed items), and removing expired ones.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
 import numpy as np
 
-from core.constants import FOOD_SPAWN_RATE, MAX_FOOD
-from world.food import Food
+from core.constants import (
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
+    MAX_FOOD_SOURCES,
+    FOOD_SOURCE_COOLDOWN,
+    ZONE_BOUNDARY_X,
+)
+from world.food import FoodSource
 
 if TYPE_CHECKING:
     from world.world import World
 
 
 class EnvironmentSystem:
-    """Manages environmental mechanics (weather, dynamic food spawning) in the arena.
+    """Manages environmental mechanics (food sources, weather hooks) in the arena.
 
     Parameters
     ----------
@@ -29,21 +36,48 @@ class EnvironmentSystem:
 
     def __init__(self, world: World) -> None:
         self.world: World = world
-        self.food_timer: float = 0.0
+        self.food_sources: list[FoodSource] = []
+        self.source_cooldown: float = 0.0
         self.weather_condition: str = "clear"  # Hook for future weather modifiers
 
     def update(self, dt: float) -> None:
         """Advance environmental mechanics by one simulation step."""
         self._update_weather(dt)
-        self._spawn_food(dt)
+        self._manage_food_sources(dt)
 
     def _update_weather(self, dt: float) -> None:
         """Hook for future dynamic weather simulation (rain, wind, temperature changes)."""
         pass
 
-    def _spawn_food(self, dt: float) -> None:
-        """Dynamically spawn food items into the arena."""
-        self.food_timer += dt * FOOD_SPAWN_RATE
-        while self.food_timer >= 1.0 and len(self.world.food_items) < MAX_FOOD:
-            self.food_timer -= 1.0
-            self.world.spawn_food_batch(1)
+    def _manage_food_sources(self, dt: float) -> None:
+        """Update existing food sources and spawn new ones on cooldown.
+
+        Each active source generates food items around itself. When a source
+        expires (lifetime reaches 0), it is removed. New sources are spawned
+        when below the cap and the cooldown has elapsed.
+        """
+        rng = self.world.rng
+
+        # --- Update existing sources and collect spawned food ---
+        current_food_count = len(self.world.food_items)
+        surviving_sources: list[FoodSource] = []
+
+        for source in self.food_sources:
+            new_food = source.update(dt, current_food_count)
+            self.world.food_items.extend(new_food)
+            current_food_count += len(new_food)
+
+            if not source.expired:
+                surviving_sources.append(source)
+
+        self.food_sources = surviving_sources
+
+        # --- Spawn new sources on cooldown ---
+        self.source_cooldown -= dt
+        if self.source_cooldown <= 0.0 and len(self.food_sources) < MAX_FOOD_SOURCES:
+            margin = 50.0
+            x = rng.uniform(margin, WORLD_WIDTH - margin)
+            y = rng.uniform(margin, WORLD_HEIGHT - margin)
+            new_source = FoodSource(np.array([x, y]), rng)
+            self.food_sources.append(new_source)
+            self.source_cooldown = FOOD_SOURCE_COOLDOWN

@@ -8,6 +8,7 @@ the simulation orchestrator, and controlling visual output rendering.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import pygame
 
@@ -16,9 +17,22 @@ from core.simulation import Simulation
 from rendering.renderer import Renderer
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="2D Ecosystem Simulation Engine")
+    parser.add_argument(
+        "-p", "--path", "--load",
+        dest="load_path",
+        type=str,
+        default=None,
+        help="Path to saved genomes JSON file to start the simulation from.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     """Entry point for the simulation application."""
-    simulation = Simulation()
+    args = parse_args()
+    simulation = Simulation(load_path=args.load_path)
     renderer = Renderer()
 
     base_dt: float = 1.0 / float(FPS)
@@ -36,8 +50,11 @@ def main() -> None:
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    # Reset simulation world and spawn initial populations
-                    simulation.world.reset_with_genomes({})
+                    # Reset simulation world and spawn initial populations or reload save
+                    simulation.reset()
+                elif event.key == pygame.K_p:
+                    # Save top 10% brains to JSON file
+                    simulation.save_top_brains()
                 elif event.key == pygame.K_s:
                     renderer.toggle_sensors()
                 elif pygame.K_1 <= event.key <= pygame.K_8:

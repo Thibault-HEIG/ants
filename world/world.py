@@ -23,7 +23,7 @@ from core.utils import SpeciesStats
 from evolution.genetics import mutate, select_parents
 from species.ant import Ant
 from species.spider import Spider
-from world.food import Food
+from world.food import Food, FoodSource
 from world.physics import SpatialHash, resolve_combat, resolve_food_collisions
 from world.environment import EnvironmentSystem
 
@@ -68,7 +68,18 @@ class World:
         # Populate initial world state
         for cls in self.active_species:
             self._spawn_species(cls)
-        self.spawn_food_batch(MAX_FOOD // 2)
+
+        # Kick-start with an initial food source so creatures have something to eat
+        self.environment.source_cooldown = 0.0  # allow immediate first source
+
+    # ------------------------------------------------------------------
+    # Convenience accessors
+    # ------------------------------------------------------------------
+
+    @property
+    def food_sources(self) -> list[FoodSource]:
+        """Expose food sources from the environment system for rendering."""
+        return self.environment.food_sources
 
     # ------------------------------------------------------------------
     # Backwards compatibility properties for Ant and Spider
@@ -117,6 +128,9 @@ class World:
     def update(self, dt: float) -> None:
         """Advance the simulation world by one time step without hardcoded type checks."""
         self.round_time += dt
+
+        # Phase 0: Environment update first — spawns food sources and food items
+        self.environment.update(dt)
 
         # Populate spatial grid
         self.spatial_hash.clear()
@@ -171,7 +185,6 @@ class World:
                 self.dead_creatures[cls] = self.dead_creatures[cls][:100]
             self.creatures[cls] = [c for c in self.creatures[cls] if getattr(c, "alive", False)]
 
-
         self.food_items = [f for f in self.food_items if not getattr(f, "consumed", False)]
 
         # Phase 5.5: Continuous Fitness-Based Reproduction & Extinction Recovery
@@ -206,39 +219,27 @@ class World:
             else:
                 self.repro_timers[cls] = 0.0
 
-        # Phase 6: Environment system update (weather & food spawning)
-        self.environment.update(dt)
-
     def _select_parent(self, creatures: list[Any]) -> Any:
         """Select a parent using truncation selection."""
         parents = select_parents(creatures)
         return parents[int(self.rng.integers(len(parents)))]
 
-    def spawn_food_batch(self, count: int) -> None:
-        """Add new food items into the arena (80% chance in Right Zone)."""
-        for _ in range(count):
-            if len(self.food_items) >= MAX_FOOD:
-                break
-
-            if self.rng.random() < 0.8:
-                x = self.rng.uniform(ZONE_BOUNDARY_X, self.width - 10)
-            else:
-                x = self.rng.uniform(10, ZONE_BOUNDARY_X)
-
-            y = self.rng.uniform(10, self.height - 10)
-            self.food_items.append(Food(np.array([x, y])))
-
     def _spawn_species(self, cls: type, genomes: list[np.ndarray] | None = None) -> None:
         """Spawn initial population for a given species class."""
-        count = len(genomes) if genomes is not None else getattr(cls, "initial_count", 10)
+        target_count = getattr(cls, "initial_count", 10)
+        count = max(len(genomes), target_count) if genomes is not None and len(genomes) > 0 else target_count
         self.creatures[cls] = []
         self.dead_creatures[cls] = []
 
         for i in range(count):
             pos = self.rng.uniform([50, 50], [self.width - 50, self.height - 50])
             creature = cls(pos, self.rng)
-            if genomes is not None:
-                creature.genome = genomes[i]
+            if genomes is not None and len(genomes) > 0:
+                if i < len(genomes):
+                    creature.genome = genomes[i]
+                else:
+                    parent_genome = genomes[i % len(genomes)]
+                    creature.genome = mutate(parent_genome, self.rng)
             self.creatures[cls].append(creature)
 
     def reset_with_genomes(
@@ -260,9 +261,9 @@ class World:
             self._spawn_species(cls, gen_map.get(cls))
 
         self.food_items = []
-        self.spawn_food_batch(MAX_FOOD // 2)
+        self.environment.food_sources.clear()
+        self.environment.source_cooldown = 0.0
         self.repro_timers = {cls: 0.0 for cls in self.active_species}
-        self.environment.food_timer = 0.0
         self.round_time = 0.0
 
     def get_all_entities(self) -> dict:
@@ -272,4 +273,5 @@ class World:
             "spiders": self.spiders,
             "creatures": self.creatures,
             "food_items": self.food_items,
+            "food_sources": self.food_sources,
         }

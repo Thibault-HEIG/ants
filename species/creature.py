@@ -21,6 +21,7 @@ from core.constants import (
     HEALTH_DECAY_RATE,
     MAX_AGE_NORMALIZATION,
     ZONE_BOUNDARY_X,
+    EAT_DURATION,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -107,6 +108,10 @@ class Creature(ABC):
         self.enemies_touched: int = 0
         self.is_attacking: bool = False
 
+        # --- Eating state machine ---
+        self.is_eating: bool = False
+        self.eat_timer: float = 0.0
+
     @property
     def hunger(self) -> float:
         """Normalised hunger: 0 = full HP, 1 = nearly dead."""
@@ -123,7 +128,15 @@ class Creature(ABC):
         self.brain.set_genome(value)
 
     def update(self, dt: float, sensor_data: SensorData) -> None:
-        """Advance the creature by one simulation step: sense → think → move → decay."""
+        """Advance the creature by one simulation step: sense → think → move → decay.
+
+        Eating state machine:
+        - When the NN outputs eat=1 and the creature is not already eating,
+          it enters the eating state (is_eating=True, eat_timer=EAT_DURATION).
+        - While eating: creature is frozen (no movement, no turning, no attacking).
+        - When eat_timer expires: physics.resolve_food_collisions picks up the
+          food if any is nearby, then resets is_eating.
+        """
         if not self.alive:
             return
 
@@ -139,20 +152,39 @@ class Creature(ABC):
         turn_signal = brain_output[0]
         speed_signal = brain_output[1]
         attack_signal = brain_output[2]
-        self.is_attacking = bool(attack_signal > 0.5)
+        eat_signal = brain_output[3]
 
-        self.direction += turn_signal * self._turn_rate * dt
-        self.direction = normalize_angle(self.direction)
+        # --- Eating state machine ---
+        if self.is_eating:
+            # Frozen while eating — no movement, no turning, no attacking
+            self.eat_timer -= dt
+            self.speed = 0.0
+            self.is_attacking = False
+            # eat_timer expiry is handled by physics.resolve_food_collisions
+        else:
+            # Check if creature wants to start eating
+            if eat_signal > 0.5:
+                self.is_eating = True
+                self.eat_timer = EAT_DURATION
+                self.speed = 0.0
+                self.is_attacking = False
+            else:
+                # Normal movement and combat
+                self.is_attacking = bool(attack_signal > 0.5)
 
-        self.speed = speed_signal * effective_max_speed
-        dx = math.cos(self.direction) * self.speed * dt
-        dy = math.sin(self.direction) * self.speed * dt
-        self.position[0] += dx
-        self.position[1] += dy
+                self.direction += turn_signal * self._turn_rate * dt
+                self.direction = normalize_angle(self.direction)
 
-        self.position[0] = clamp(self.position[0], 0.0, float(WORLD_WIDTH))
-        self.position[1] = clamp(self.position[1], 0.0, float(WORLD_HEIGHT))
+                self.speed = speed_signal * effective_max_speed
+                dx = math.cos(self.direction) * self.speed * dt
+                dy = math.sin(self.direction) * self.speed * dt
+                self.position[0] += dx
+                self.position[1] += dy
 
+                self.position[0] = clamp(self.position[0], 0.0, float(WORLD_WIDTH))
+                self.position[1] = clamp(self.position[1], 0.0, float(WORLD_HEIGHT))
+
+        # --- Health decay (always applies, even while eating) ---
         self.health -= HEALTH_DECAY_RATE * dt
         if self.is_attacking:
             self.health -= self._attack_cost * dt
@@ -199,7 +231,8 @@ class Creature(ABC):
 
     def __repr__(self) -> str:
         status = "alive" if self.alive else "dead"
+        eating = " [EATING]" if self.is_eating else ""
         return (
-            f"{self.__class__.__name__}({status}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
+            f"{self.__class__.__name__}({status}{eating}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
             f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched})"
         )

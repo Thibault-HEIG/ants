@@ -2,8 +2,9 @@
 renderer.py — Pygame Visualization and Simulation Renderer
 ==========================================================
 
-Renders the 2-D simulation arena, background zones, food items, living/dead
-creature sprites, vision/density sensor rays, and UI HUD overlays.
+Renders the 2-D simulation arena, background zones, food sources, typed food
+items (sugar/seed sprites), living/dead creature sprites, vision/density sensor
+rays, eating indicators, and UI HUD overlays.
 Supports dynamic species scaling without hardcoded class name loops.
 """
 
@@ -26,6 +27,7 @@ from core.constants import (
     HUD_FONT_SIZE,
     HUD_ACCENT_COLOR,
     SPIDER_ACCENT_COLOR,
+    FOOD_SOURCE_RADIUS,
 )
 from rendering.ui import draw_health_bar, draw_hud_panel
 
@@ -63,14 +65,32 @@ class Renderer:
 
         self._load_sprite("Ant", os.path.join(assets_dir, "ant.png"), (24, 24))
         self._load_sprite("Spider", os.path.join(assets_dir, "spider.png"), (32, 32))
+        self._load_sprite("sugar", os.path.join(assets_dir, "sugar.png"), (14, 14))
+        self._load_sprite("seed", os.path.join(assets_dir, "seed.png"), (12, 16))
 
-    def _load_sprite(self, species_name: str, filepath: str, size: tuple[int, int]) -> None:
+        # Animation timer for general visual effects
+        self._pulse_timer: float = 0.0
+
+        # Cache for radial shadow surfaces to avoid per-frame allocation
+        self._shadow_cache: dict[tuple[int, tuple[int, int, int]], pygame.Surface] = {}
+
+    def _load_sprite(self, name: str, filepath: str, size: tuple[int, int]) -> None:
         try:
             if os.path.exists(filepath):
                 image = pygame.image.load(filepath).convert_alpha()
-                self.sprites[species_name] = pygame.transform.smoothscale(image, size)
+                self.sprites[name] = pygame.transform.smoothscale(image, size)
         except Exception:
             pass  # Fallback to geometric shapes if loading fails
+
+    def _get_shadow_surface(self, radius: float, color: tuple[int, int, int]) -> pygame.Surface:
+        """Get or generate a soft radial shadow surface of the specified radius and color."""
+        r_shadow = max(4, int(radius * 1.35))
+        key = (r_shadow, color)
+        if key not in self._shadow_cache:
+            shadow = pygame.Surface((r_shadow * 2, r_shadow * 2), pygame.SRCALPHA)
+            pygame.draw.circle(shadow, (*color, 40), (r_shadow, r_shadow), r_shadow)
+            self._shadow_cache[key] = shadow
+        return self._shadow_cache[key]
 
     def toggle_sensors(self) -> None:
         """Toggle visualization of sensory rays."""
@@ -78,6 +98,9 @@ class Renderer:
 
     def render(self, world: World, simulation: Any | None = None) -> None:
         """Render one full frame of the simulation."""
+        # Update animation timer
+        self._pulse_timer += 1.0 / 60.0
+
         # 1. Background and Zones
         self.screen.fill(BG_COLOR)
 
@@ -91,15 +114,23 @@ class Renderer:
         for y in range(0, self.height, dash_len * 2):
             pygame.draw.line(self.screen, (70, 80, 90), (ZONE_BOUNDARY_X, y), (ZONE_BOUNDARY_X, min(self.height, y + dash_len)), 1)
 
-        # 2. Food Items
+        # 2. Food Items — typed sprites
         for food in world.food_items:
             if getattr(food, "consumed", False):
                 continue
             fx, fy = int(food.position[0]), int(food.position[1])
-            pygame.draw.circle(self.screen, (80, 220, 100), (fx, fy), int(food.radius))
-            pygame.draw.circle(self.screen, (150, 255, 170), (fx, fy), max(1, int(food.radius - 2)))
+            food_type = getattr(food, "food_type", None)
+            sprite = self.sprites.get(food_type) if food_type else None
 
-        # 3. Living Creatures
+            if sprite is not None:
+                rect = sprite.get_rect(center=(fx, fy))
+                self.screen.blit(sprite, rect)
+            else:
+                # Fallback geometric rendering
+                pygame.draw.circle(self.screen, (80, 220, 100), (fx, fy), int(food.radius))
+                pygame.draw.circle(self.screen, (150, 255, 170), (fx, fy), max(1, int(food.radius - 2)))
+
+        # 4. Living Creatures
         for cls, alive_list in world.creatures.items():
             species_name = getattr(cls, "species_name", cls.__name__)
             for creature in alive_list:
@@ -137,6 +168,17 @@ class Renderer:
         cx, cy = int(creature.position[0]), int(creature.position[1])
         angle_deg = -math.degrees(creature.direction) - 90.0
 
+        if not is_dead:
+            # 1. Light red shadow behind attacking creatures (replaces big attack circle)
+            if getattr(creature, "is_attacking", False):
+                shadow = self._get_shadow_surface(creature.radius, (240, 60, 60))
+                self.screen.blit(shadow, shadow.get_rect(center=(cx, cy)))
+
+            # 2. Light white shadow behind eating creatures (replaces eating ring circle)
+            if getattr(creature, "is_eating", False):
+                shadow = self._get_shadow_surface(creature.radius, (255, 255, 255))
+                self.screen.blit(shadow, shadow.get_rect(center=(cx, cy)))
+
         sprite = self.sprites.get(species_name)
         if sprite is not None:
             if is_dead:
@@ -161,11 +203,6 @@ class Renderer:
 
         if not is_dead:
             draw_health_bar(self.screen, float(cx), float(cy), creature.radius, creature.health, creature.max_health)
-
-            # Attack visual slash
-            if getattr(creature, "is_attacking", False):
-                strike_r = int(getattr(creature, "strike_range", 20.0))
-                pygame.draw.circle(self.screen, (255, 200, 50), (cx, cy), strike_r, 1)
 
     def _draw_sensors(self, creature: Any) -> None:
         cx, cy = float(creature.position[0]), float(creature.position[1])
