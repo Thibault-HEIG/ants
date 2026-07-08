@@ -67,6 +67,8 @@ class Renderer:
         self._load_sprite("Spider", os.path.join(assets_dir, "spider.png"), (32, 32))
         self._load_sprite("sugar", os.path.join(assets_dir, "sugar.png"), (14, 14))
         self._load_sprite("seed", os.path.join(assets_dir, "seed.png"), (12, 16))
+        self._load_sprite("anthill", os.path.join(assets_dir, "anthill.png"), (200, 200))
+        self._load_sprite("toile", os.path.join(assets_dir, "toile.png"), (200, 200))
 
         # Animation timer for general visual effects
         self._pulse_timer: float = 0.0
@@ -113,6 +115,47 @@ class Renderer:
         dash_len = 10
         for y in range(0, self.height, dash_len * 2):
             pygame.draw.line(self.screen, (70, 80, 90), (ZONE_BOUNDARY_X, y), (ZONE_BOUNDARY_X, min(self.height, y + dash_len)), 1)
+
+        # 1.2. Pheromone Trails & Narrow Grid (Grid only when S is pressed)
+        if getattr(world, "pheromone_grid", None) is not None:
+            cell_size = getattr(world, "pheromone_cell_size", 10.0)
+            grid = world.pheromone_grid
+            xs, ys = np.where(grid > 0.01)
+            for x_idx, y_idx in zip(xs, ys):
+                strength = float(grid[x_idx, y_idx])
+                opacity = min(255, int((strength / 2.0) * 255))
+                if opacity > 5:
+                    s = pygame.Surface((int(cell_size), int(cell_size)), pygame.SRCALPHA)
+                    s.fill((255, 255, 150, opacity))
+                    self.screen.blit(s, (int(x_idx * cell_size), int(y_idx * cell_size)))
+
+            if self.show_sensors:
+                gw, gh = grid.shape
+                for gx in range(gw + 1):
+                    x_pos = int(gx * cell_size)
+                    pygame.draw.line(self.screen, (50, 55, 65), (x_pos, 0), (x_pos, self.height), 1)
+                for gy in range(gh + 1):
+                    y_pos = int(gy * cell_size)
+                    pygame.draw.line(self.screen, (50, 55, 65), (0, y_pos), (self.width, y_pos), 1)
+
+        # 1.3. Lakes
+        for lake in getattr(world, "lakes", []):
+            lx, ly = int(lake.position[0]), int(lake.position[1])
+            lrad = int(getattr(lake, "radius", 50.0))
+            pygame.draw.circle(self.screen, (25, 60, 110), (lx, ly), lrad)
+            pygame.draw.circle(self.screen, (45, 95, 165), (lx, ly), lrad, 3)
+
+        # 1.4. Kingdoms
+        kingdoms = world.kingdoms.values() if isinstance(getattr(world, "kingdoms", None), dict) else getattr(world, "kingdoms", [])
+        for kingdom in kingdoms:
+            kx, ky = int(kingdom.position[0]), int(kingdom.position[1])
+            kname = getattr(kingdom, "name", "")
+            sprite = self.sprites.get(kname)
+            if sprite is not None:
+                rect = sprite.get_rect(center=(kx, ky))
+                self.screen.blit(sprite, rect)
+            else:
+                pygame.draw.circle(self.screen, (100, 80, 60), (kx, ky), int(getattr(kingdom, "spawn_radius", 60.0)), 2)
 
         # 2. Food Items — typed sprites
         for food in world.food_items:

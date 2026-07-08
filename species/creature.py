@@ -110,6 +110,9 @@ class Creature(ABC):
         self.enemies_touched: int = 0
         self.times_eating_for_nothing: int = 0
         self.times_attacking_for_nothing: int = 0
+        self.follow_pheromones: float = 0.0
+        self._last_tile: tuple[int, int] | None = None
+        self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
 
         # --- Eating state machine ---
@@ -136,7 +139,7 @@ class Creature(ABC):
         """Install a new genome into the brain."""
         self.brain.set_genome(value)
 
-    def update(self, dt: float, sensor_data: SensorData) -> None:
+    def update(self, dt: float, sensor_data: Any, world: Any | None = None) -> None:
         """Advance the creature by one simulation step: sense → think → move → decay.
 
         Eating state machine:
@@ -163,6 +166,12 @@ class Creature(ABC):
         age_normalized = min(1.0, self.survival_time / MAX_AGE_NORMALIZATION) if MAX_AGE_NORMALIZATION > 0 else 0.0
 
         sensor_data.has_gained_hp = 1.0 if self._has_gained_hp else 0.0
+        if world is not None and getattr(world, "pheromone_grid", None) is not None:
+            gw, gh = world.pheromone_grid.shape
+            cx = int(clamp(self.position[0] / getattr(world, "pheromone_cell_size", 10.0), 0.0, float(gw - 1)))
+            cy = int(clamp(self.position[1] / getattr(world, "pheromone_cell_size", 10.0), 0.0, float(gh - 1)))
+            sensor_data.pheromone_strength = float(world.pheromone_grid[cx, cy])
+
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 
         brain_output = self.brain.forward(inputs)

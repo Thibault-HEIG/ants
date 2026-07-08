@@ -24,7 +24,9 @@ from evolution.genetics import mutate, select_parents
 from species.ant import Ant
 from species.spider import Spider
 from world.food import Food, FoodSource
-from world.physics import SpatialHash, resolve_combat, resolve_food_collisions
+from world.kingdom import Kingdom
+from world.obstacle import Lake
+from world.physics import SpatialHash, resolve_combat, resolve_food_collisions, resolve_lake_collisions
 from world.environment import EnvironmentSystem
 
 
@@ -64,6 +66,25 @@ class World:
         self.spatial_hash: SpatialHash = SpatialHash(cell_size=100.0)
         self.environment: EnvironmentSystem = EnvironmentSystem(self)
         self.round_time: float = 0.0
+
+        # Phase 2: Kingdoms
+        self.kingdoms: dict[type, Kingdom] = {
+            Ant: Kingdom("anthill", Ant, np.array([120.0, 120.0]), spawn_radius=60.0),
+            Spider: Kingdom("toile", Spider, np.array([self.width - 120.0, self.height - 120.0]), spawn_radius=60.0),
+        }
+
+        # Phase 3: Lakes
+        self.lakes: list[Lake] = [
+            Lake(np.array([380.0, 420.0]), radius=50.0),
+            Lake(np.array([600.0, 240.0]), radius=55.0),
+            Lake(np.array([820.0, 560.0]), radius=50.0),
+        ]
+
+        # Phase 4: Pheromones (10x10 tiles)
+        self.pheromone_cell_size: float = 10.0
+        gw = int(self.width / self.pheromone_cell_size)
+        gh = int(self.height / self.pheromone_cell_size)
+        self.pheromone_grid: np.ndarray = np.zeros((gw, gh), dtype=float)
 
         # Populate initial world state
         for cls in self.active_species:
@@ -129,6 +150,11 @@ class World:
         """Advance the simulation world by one time step without hardcoded type checks."""
         self.round_time += dt
 
+        # Phase 0.5: Decay ant pheromone grid
+        from species.ant_constants import PHEROMONE_STRENGTH, PHEROMONE_DURATION
+        decay_amount = (PHEROMONE_STRENGTH / PHEROMONE_DURATION) * dt
+        np.maximum(self.pheromone_grid - decay_amount, 0.0, out=self.pheromone_grid)
+
         # Phase 0: Environment update first — spawns food sources and food items
         self.environment.update(dt)
 
@@ -169,12 +195,16 @@ class World:
                     float(self.width),
                     float(self.height),
                     spatial_hash=self.spatial_hash,
+                    lakes=self.lakes,
+                    pheromone_grid=self.pheromone_grid,
+                    pheromone_cell_size=self.pheromone_cell_size,
                 )
-                creature.update(dt, sensor_data)
+                creature.update(dt, sensor_data, world=self)
 
         # Phase 3 & 4: Physics and collision resolution (spatial hash accelerated)
         resolve_combat(self.creatures, spatial_hash=self.spatial_hash)
         resolve_food_collisions(self.creatures, self.food_items, spatial_hash=self.spatial_hash)
+        resolve_lake_collisions(self.creatures, self.lakes)
 
         # Phase 5: Cleanup dead entities
         for cls in list(self.creatures.keys()):
@@ -211,8 +241,12 @@ class World:
                 while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
                     self.repro_timers[cls] -= threshold
                     parent = self._select_parent(self.creatures[cls])
-                    offset = self.rng.uniform(-5.0, 5.0, size=2)
-                    child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
+                    kingdom = self.kingdoms.get(cls)
+                    if kingdom is not None:
+                        child_pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
+                    else:
+                        offset = self.rng.uniform(-5.0, 5.0, size=2)
+                        child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
                     child = cls(child_pos, self.rng)
                     child.genome = mutate(parent.genome, self.rng)
                     self.creatures[cls].append(child)
@@ -232,7 +266,11 @@ class World:
         self.dead_creatures[cls] = []
 
         for i in range(count):
-            pos = self.rng.uniform([50, 50], [self.width - 50, self.height - 50])
+            kingdom = self.kingdoms.get(cls)
+            if kingdom is not None:
+                pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
+            else:
+                pos = self.rng.uniform([50, 50], [self.width - 50, self.height - 50])
             creature = cls(pos, self.rng)
             if genomes is not None and len(genomes) > 0:
                 if i < len(genomes):
@@ -265,6 +303,7 @@ class World:
         self.environment.source_cooldown = 0.0
         self.repro_timers = {cls: 0.0 for cls in self.active_species}
         self.round_time = 0.0
+        self.pheromone_grid.fill(0.0)
 
     def get_all_entities(self) -> dict:
         """Return all entities for rendering."""
@@ -274,4 +313,8 @@ class World:
             "creatures": self.creatures,
             "food_items": self.food_items,
             "food_sources": self.food_sources,
+            "kingdoms": list(self.kingdoms.values()),
+            "lakes": self.lakes,
+            "pheromone_grid": self.pheromone_grid,
+            "pheromone_cell_size": self.pheromone_cell_size,
         }

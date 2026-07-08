@@ -199,3 +199,44 @@ def resolve_food_collisions(
             # Reset eating state regardless of whether food was found
             creature.is_eating = False
             creature.eat_timer = 0.0
+
+
+def resolve_lake_collisions(
+    creatures_by_species: dict[type, list[Any]],
+    lakes: list[Any],
+) -> None:
+    """Push creatures out of static circular lake obstacles."""
+    if not lakes:
+        return
+
+    for pop in creatures_by_species.values():
+        for creature in pop:
+            if not getattr(creature, "alive", False):
+                continue
+
+            cx = float(creature.position[0])
+            cy = float(creature.position[1])
+            cradius = float(getattr(creature, "radius", 12.0))
+
+            for lake in lakes:
+                lx = float(lake.position[0])
+                ly = float(lake.position[1])
+                lradius = float(getattr(lake, "radius", 50.0))
+
+                dx = cx - lx
+                dy = cy - ly
+                dist_sq = dx * dx + dy * dy
+                min_dist = cradius + lradius
+
+                if dist_sq < min_dist * min_dist:
+                    if dist_sq < 1e-9:
+                        dx, dy = 1.0, 0.0
+                        dist = 1.0
+                    else:
+                        dist = math.sqrt(dist_sq)
+
+                    overlap = min_dist - dist
+                    nx = dx / dist
+                    ny = dy / dist
+                    creature.position[0] += nx * overlap
+                    creature.position[1] += ny * overlap

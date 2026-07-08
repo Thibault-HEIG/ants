@@ -45,11 +45,12 @@ class RayResult:
     ally_is_eating: float = 0.0
     ally_is_attacking: float = 0.0
     wall_distance: float = 0.0
+    pheromone_distance: float = 0.0
 
 
 @dataclass
 class SectorReading:
-    """Readings from a single directional sensor sector."""
+    """Readings from a single directional sector."""
     enemy_distance: float = 0.0       # inverted: 0 = no enemy, 1 = touching
     enemy_is_eating: float = 0.0      # {0, 1}: 1 if seen enemy is eating
     enemy_is_attacking: float = 0.0   # {0, 1}: 1 if seen enemy is attacking
@@ -58,6 +59,7 @@ class SectorReading:
     ally_is_attacking: float = 0.0    # {0, 1}: 1 if seen ally is attacking
     food_distance: float = 0.0        # inverted: 0 = no food, 1 = touching
     wall_distance: float = 0.0        # inverted: 0 = no wall, 1 = touching
+    pheromone_distance: float = 0.0   # inverted: 0 = no pheromone trail, 1 = touching trail
 
 
 def _default_sectors() -> list[SectorReading]:
@@ -79,16 +81,19 @@ class SensorData:
     # --- HP gain feedback ---
     has_gained_hp: float = 0.0   # {0, 1}
 
+    # --- Pheromone concentration under foot ---
+    pheromone_strength: float = 0.0
+
     def to_array(self, hp: float, zone: float, speed: float, age: float) -> np.ndarray:
-        """Convert sensor readings + internal state into a 71-element input vector.
+        """Convert sensor readings + internal state into an 80-element input vector.
 
         Layout:
-          [0..63]  8 sectors × 8 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist]
-          [64..70] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp]
+          [0..71]  8 sectors × 9 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist, pheromone_dist]
+          [72..79] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp, pheromone_strength]
         """
-        arr = np.empty(NN_NUM_SENSORS * 8 + 7, dtype=float)
+        arr = np.empty(NN_NUM_SENSORS * 9 + 8, dtype=float)
 
-        # Pack sector readings: 8 sectors × 8 features
+        # Pack sector readings: 8 sectors × 9 features
         idx = 0
         for sector in self.sectors:
             arr[idx] = sector.enemy_distance
@@ -99,7 +104,8 @@ class SensorData:
             arr[idx + 5] = sector.ally_is_attacking
             arr[idx + 6] = sector.food_distance
             arr[idx + 7] = sector.wall_distance
-            idx += 8
+            arr[idx + 8] = sector.pheromone_distance
+            idx += 9
 
         # Pack state inputs
         arr[idx] = hp
@@ -109,6 +115,7 @@ class SensorData:
         arr[idx + 4] = self.ally_density
         arr[idx + 5] = self.enemy_density
         arr[idx + 6] = self.has_gained_hp
+        arr[idx + 7] = self.pheromone_strength
 
         return arr
 
@@ -137,11 +144,11 @@ class SensorRay:
         ally_targets: list[tuple[float, float, float, bool, bool]],
         world_width: float,
         world_height: float,
+        lakes: list[Any] | None = None,
+        pheromone_grid: np.ndarray | None = None,
+        pheromone_cell_size: float = 10.0,
     ) -> RayResult:
-        """Cast this ray and find the nearest food, enemy, ally, and wall.
-
-        Targets are pre-extracted as tuples to avoid repeated attribute lookups inside the hot loop.
-        """
+        """Cast this ray and find the nearest food, enemy, ally, wall/lake, and pheromone trail."""
         ray_angle = heading + self.angle_offset
         rdx = math.cos(ray_angle)
         rdy = math.sin(ray_angle)
@@ -153,7 +160,8 @@ class SensorRay:
         result.food_distance = self._detect_nearest(ox, oy, rdx, rdy, food_targets)
         result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
         result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
-        result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height)
+        result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height, lakes)
+        result.pheromone_distance = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_grid, pheromone_cell_size)
 
         return result
 
@@ -258,11 +266,9 @@ class SensorRay:
         rdx: float, rdy: float,
         world_width: float,
         world_height: float,
+        lakes: list[Any] | None = None,
     ) -> float:
-        """Calculate distance along the ray until it intersects a world boundary.
-
-        Returns inverted distance: 0.0 = no wall in range, 1.0 = touching wall.
-        """
+        """Calculate distance along the ray until it intersects a world boundary or static lake obstacle."""
         min_t = self.max_range
 
         if abs(rdx) > 1e-9:
@@ -281,8 +287,50 @@ class SensorRay:
             if t_bottom > 0:
                 min_t = min(min_t, t_bottom)
 
+        if lakes:
+            for lake in lakes:
+                lx = float(lake.position[0])
+                ly = float(lake.position[1])
+                lradius = float(getattr(lake, "radius", 50.0))
+
+                dx = lx - ox
+                dy = ly - oy
+                dot = dx * rdx + dy * rdy
+                if dot < 0.0:
+                    continue
+                dist_sq = dx * dx + dy * dy
+                perp_sq = dist_sq - dot * dot
+                if perp_sq <= lradius * lradius and dot < min_t:
+                    min_t = dot
+
         raw = min_t / self.max_range
         return max(0.0, 1.0 - min(1.0, raw))
+
+    def _detect_pheromone(
+        self,
+        ox: float, oy: float,
+        rdx: float, rdy: float,
+        pheromone_grid: np.ndarray | None,
+        cell_size: float,
+    ) -> float:
+        """Detect the nearest pheromone trail cell along the ray direction."""
+        if pheromone_grid is None:
+            return 0.0
+
+        gw, gh = pheromone_grid.shape
+        step = 10.0
+        dist = 5.0
+        max_r = self.max_range
+        while dist <= max_r:
+            px = ox + rdx * dist
+            py = oy + rdy * dist
+            gx = int(px / cell_size)
+            gy = int(py / cell_size)
+            if 0 <= gx < gw and 0 <= gy < gh:
+                if pheromone_grid[gx, gy] > 0.01:
+                    return max(0.0, 1.0 - (dist / max_r))
+            dist += step
+        return 0.0
 
 
 class Sensors:
@@ -325,6 +373,9 @@ class Sensors:
         world_width: float,
         world_height: float,
         spatial_hash: SpatialHash | None = None,
+        lakes: list[Any] | None = None,
+        pheromone_grid: np.ndarray | None = None,
+        pheromone_cell_size: float = 10.0,
     ) -> SensorData:
         """Gather all sensor readings for one creature without hardcoded class dependencies.
 
@@ -394,6 +445,9 @@ class Sensors:
             ray_res = ray.cast(
                 position, direction, food_targets, enemy_targets, ally_targets,
                 world_width, world_height,
+                lakes=lakes,
+                pheromone_grid=pheromone_grid,
+                pheromone_cell_size=pheromone_cell_size,
             )
             data.sectors[i].enemy_distance = ray_res.enemy_distance
             data.sectors[i].enemy_is_eating = ray_res.enemy_is_eating
@@ -403,6 +457,7 @@ class Sensors:
             data.sectors[i].ally_is_attacking = ray_res.ally_is_attacking
             data.sectors[i].food_distance = ray_res.food_distance
             data.sectors[i].wall_distance = ray_res.wall_distance
+            data.sectors[i].pheromone_distance = ray_res.pheromone_distance
 
         # -----------------------------------------------------------------
         # Density awareness — reuse the extracted tuples

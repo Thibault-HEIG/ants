@@ -18,6 +18,7 @@ from core.constants import (
     MAX_FOOD_SOURCES,
     FOOD_SOURCE_COOLDOWN,
     ZONE_BOUNDARY_X,
+    FOOD_SOURCE_LEFT_ZONE_PROB,
 )
 from world.food import FoodSource
 
@@ -76,7 +77,10 @@ class EnvironmentSystem:
         self.source_cooldown -= dt
         if self.source_cooldown <= 0.0 and len(self.food_sources) < MAX_FOOD_SOURCES:
             margin = 50.0
-            x = rng.uniform(margin, WORLD_WIDTH - margin)
+            if rng.random() < FOOD_SOURCE_LEFT_ZONE_PROB:
+                x = rng.uniform(margin, ZONE_BOUNDARY_X - margin)
+            else:
+                x = rng.uniform(ZONE_BOUNDARY_X + margin, WORLD_WIDTH - margin)
             y = rng.uniform(margin, WORLD_HEIGHT - margin)
             new_source = FoodSource(np.array([x, y]), rng)
             self.food_sources.append(new_source)

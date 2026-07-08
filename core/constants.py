@@ -41,6 +41,7 @@ FOOD_SOURCE_SPAWN_RATE: float = 1.5        # food items generated per second per
 FOOD_SOURCE_SPAWN_RADIUS: float = 80.0     # scatter radius around the source
 MAX_FOOD_SOURCES: int = 5                  # max simultaneous active sources
 FOOD_SOURCE_COOLDOWN: float = 30.0         # seconds between new source spawns
+FOOD_SOURCE_LEFT_ZONE_PROB: float = 0.75   # 75% chance a food source spawns in Ants Zone (Left)
 
 # ---------------------------------------------------------------------------
 # Eating mechanic
@@ -57,7 +58,7 @@ MAX_DENSITY_COUNT: int = 10             # normalisation cap: 10+ nearby → 1.0
 # Neural network architecture
 # ---------------------------------------------------------------------------
 NN_NUM_SENSORS: int = 8         # directional sensors evenly spanning the FOV
-NN_INPUTS: int = 71             # 8 sensors × 8 features + 7 state inputs
+NN_INPUTS: int = 80             # 8 sensors × 9 features + 8 state inputs
 NN_HIDDEN_1: int = 16           # first hidden layer
 NN_HIDDEN_2: int = 8            # second hidden layer
 NN_OUTPUTS: int = 4             # turn, speed, attack, eat
@@ -66,7 +67,7 @@ GENOME_SIZE: int = (
     (NN_INPUTS * NN_HIDDEN_1) + NN_HIDDEN_1 +
     (NN_HIDDEN_1 * NN_HIDDEN_2) + NN_HIDDEN_2 +
     (NN_HIDDEN_2 * NN_OUTPUTS) + NN_OUTPUTS
-)  # = 1324
+)  # = 1468
 
 # ---------------------------------------------------------------------------
 # Genetic algorithm
@@ -82,8 +83,8 @@ FPS: int = 60                         # target frames per second
 
 # Colours (R, G, B)
 BG_COLOR: tuple[int, int, int] = (34, 40, 49)          # dark charcoal background
-ZONE_DANGER_COLOR: tuple[int, int, int] = (45, 30, 30) # faint red tint (Left Zone)
-ZONE_SAFE_COLOR: tuple[int, int, int] = (30, 45, 30)   # faint green tint (Right Zone)
+ZONE_DANGER_COLOR: tuple[int, int, int] = (30, 45, 30) # faint green tint (Left Zone / Ants Zone)
+ZONE_SAFE_COLOR: tuple[int, int, int] = (45, 30, 30)   # faint red tint (Right Zone / Spiders Zone)
 ZONE_BOUNDARY_X: float = WORLD_WIDTH / 2.0
 HUD_TEXT_COLOR: tuple[int, int, int] = (238, 238, 238) # near-white for readability
 HUD_BG_COLOR: tuple[int, int, int] = (50, 56, 65)      # slightly lighter panel

@@ -10,9 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.constants import ZONE_BOUNDARY_X
 from species.creature import Creature
-from species.ant_constants import ANT_MAX_SPEED
 from species.spider_constants import (
     SPIDER_COUNT,
     SPIDER_INITIAL_HEALTH,
@@ -77,9 +75,7 @@ class Spider(Creature):
         )
 
     def get_effective_max_speed(self, zone: float) -> float:
-        """Spiders move at ANT_MAX_SPEED in the Danger Zone (Left Zone), else normal speed."""
-        if self.position[0] < ZONE_BOUNDARY_X:
-            return ANT_MAX_SPEED
+        """Spiders always move at their normal max speed across all zones."""
         return self._max_speed
 
     def compute_fitness(self) -> float:
