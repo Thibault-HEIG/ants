@@ -30,7 +30,7 @@ SEED_NUTRITION: float = 30.0          # HP restored by seed
 SUGAR_WEIGHT: float = 0.3             # 30% chance a source spawns sugar
 SEED_WEIGHT: float = 0.7              # 70% chance a source spawns seed
 FOOD_RADIUS: int = 6                  # collision/render radius in pixels
-MAX_FOOD: int = 80                    # global cap on food items
+MAX_FOOD: int = 150                    # global cap on food items
 
 # ---------------------------------------------------------------------------
 # Food source parameters
@@ -41,12 +41,12 @@ FOOD_SOURCE_SPAWN_RATE: float = 1.5        # food items generated per second per
 FOOD_SOURCE_SPAWN_RADIUS: float = 80.0     # scatter radius around the source
 MAX_FOOD_SOURCES: int = 5                  # max simultaneous active sources
 FOOD_SOURCE_COOLDOWN: float = 30.0         # seconds between new source spawns
-FOOD_SOURCE_LEFT_ZONE_PROB: float = 0.75   # 75% chance a food source spawns in Ants Zone (Left)
+FOOD_SOURCE_LEFT_ZONE_PROB: float = 0.66   # 66% chance a food source spawns in Ants Zone (Left)
 
 # ---------------------------------------------------------------------------
 # Eating mechanic
 # ---------------------------------------------------------------------------
-EAT_PICKUP_RADIUS: float = 15.0            # must be within this radius of food to consume
+EAT_PICKUP_RADIUS: float = 20.0            # must be within this radius of food to consume
 
 # ---------------------------------------------------------------------------
 # Sensor system
@@ -72,9 +72,9 @@ GENOME_SIZE: int = (
 # ---------------------------------------------------------------------------
 # Genetic algorithm
 # ---------------------------------------------------------------------------
-MUTATION_RATE: float = 0.5            # probability each gene is mutated
-MUTATION_STRENGTH: float = 0.5        # std-dev of Gaussian noise added to genes
-SELECTION_FRACTION: float = 0.1       # top 10% survive to breed
+MUTATION_RATE: float = 0.1            # probability each gene is mutated
+MUTATION_STRENGTH: float = 0.8        # std-dev of Gaussian noise added to genes
+SELECTION_FRACTION: float = 0.2       # top % survive to breed
 
 # ---------------------------------------------------------------------------
 # Rendering / UI
@@ -92,9 +92,9 @@ HUD_ACCENT_COLOR: tuple[int, int, int] = (0, 173, 181) # teal accent for highlig
 SPIDER_ACCENT_COLOR: tuple[int, int, int] = (220, 80, 80) # red accent for spiders
 HUD_FONT_SIZE: int = 18
 
-SPEED_MULTIPLIERS: list[float] = [0.5, 1, 2, 4, 8, 16, 32, 64]
+SPEED_MULTIPLIERS: list[float] = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256]
 
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
-RANDOM_SEED: int = 42
+RANDOM_SEED: int = 41

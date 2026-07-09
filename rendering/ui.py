@@ -109,6 +109,7 @@ def draw_hud_panel(
         (f"Sim Speed   : {sim_speed}x", HUD_TEXT_COLOR),
         (f"FPS         : {fps:.0f}", HUD_TEXT_COLOR),
         (f"Sensors [S] : {'ON' if show_sensors else 'OFF'}", (150, 255, 150) if show_sensors else (180, 180, 180)),
+        ("Curves  [F] : Terminal", (200, 220, 255)),
     ]
 
     if creature_stats is not None:

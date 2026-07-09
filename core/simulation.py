@@ -55,6 +55,14 @@ class Simulation:
             cls: getattr(cls, "initial_count", 10) for cls in self.active_species
         }
 
+        # Track average fitness curves over simulation time
+        self.history_time: list[float] = []
+        self.history_fitness: dict[str, list[float]] = {
+            getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species
+        }
+        self._plot_timer: float = 0.0
+        self._record_fitness_stat()
+
         if load_path is not None:
             self.load_from_save(load_path)
 
@@ -65,8 +73,8 @@ class Simulation:
         from datetime import datetime
 
         os.makedirs("saves", exist_ok=True)
-        # Format: mm.hh.dd.mm.yy (e.g. 21-23-06-07-26)
-        filename = datetime.now().strftime("%M-%H-%d-%m-%y.json")
+        # Format: yy.mm.dd.hh.mm (e.g. 26-06-15-09-30.json)
+        filename = datetime.now().strftime("%y.%m.%d.%H.%M.json")
         filepath = os.path.join("saves", filename)
 
         save_data = []
@@ -142,6 +150,11 @@ class Simulation:
     def reset(self) -> None:
         """Reset simulation world to initial state or loaded save."""
         self.world.reset_with_genomes(self.loaded_genomes or {})
+        self.history_time.clear()
+        for series in self.history_fitness.values():
+            series.clear()
+        self._plot_timer = 0.0
+        self._record_fitness_stat()
 
     @property
     def speed_multiplier(self) -> float:
@@ -164,6 +177,11 @@ class Simulation:
             current_total = len(self.world.creatures.get(cls, [])) + len(self.world.dead_creatures.get(cls, []))
             if current_total > self.total_spawned.get(cls, 0):
                 self.total_spawned[cls] = current_total
+
+        self._plot_timer += dt
+        if self._plot_timer >= 1.0:
+            self._plot_timer -= 1.0
+            self._record_fitness_stat()
 
     def get_total_spawned(self, cls: type) -> int:
         """Return historical peak population for a given species class."""
@@ -190,3 +208,46 @@ class Simulation:
     @total_spiders_spawned.setter
     def total_spiders_spawned(self, value: int) -> None:
         self.total_spawned[Spider] = value
+
+    def _record_fitness_stat(self) -> None:
+        """Record current average fitness for each active species."""
+        self.history_time.append(round(self.world.round_time, 1))
+        for cls in self.active_species:
+            name = getattr(cls, "species_name", cls.__name__)
+            living = self.world.creatures.get(cls, [])
+            if living:
+                avg_fit = sum(c.compute_fitness() for c in living) / len(living)
+            else:
+                avg_fit = 0.0
+            if name not in self.history_fitness:
+                self.history_fitness[name] = []
+            self.history_fitness[name].append(round(avg_fit, 2))
+
+    def plot_fitness_curves(self) -> None:
+        """Draw historical average fitness curves for all species in the terminal using plotext."""
+        try:
+            import plotext as plt
+        except ImportError:
+            print("[WARN] plotext library not installed. Cannot display terminal plots.")
+            return
+
+        if not self.history_time or len(self.history_time) < 2:
+            print("[INFO] Not enough simulation history recorded to plot fitness curves.")
+            return
+
+        plt.clear_figure()
+        plt.title("Ants vs Spiders — Evolutionary Fitness Curves")
+        plt.xlabel("Simulation Time (seconds)")
+        plt.ylabel("Average Fitness Score")
+
+        colors = {"Ant": "green", "Spider": "red"}
+        for name, fitness_series in self.history_fitness.items():
+            color = colors.get(name, "blue")
+            plt.plot(self.history_time, fitness_series, label=f"{name} Avg Fitness", color=color)
+
+        plt.plotsize(100, 25)
+        print("\n" + "=" * 80)
+        print(" " * 25 + "SIMULATION FITNESS CURVES")
+        print("=" * 80)
+        plt.show()
+        print("=" * 80 + "\n")

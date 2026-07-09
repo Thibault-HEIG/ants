@@ -57,6 +57,9 @@ def main() -> None:
                     simulation.save_top_brains()
                 elif event.key == pygame.K_s:
                     renderer.toggle_sensors()
+                elif event.key == pygame.K_f or event.key == pygame.K_c:
+                    # Print terminal fitness curves immediately
+                    simulation.plot_fitness_curves()
                 elif pygame.K_1 <= event.key <= pygame.K_8:
                     idx = event.key - pygame.K_1
                     simulation.set_speed(idx)
@@ -78,6 +81,8 @@ def main() -> None:
         if simulation.running:
             renderer.render(simulation.world, simulation)
 
+    # Always plot final fitness curves in terminal upon exiting
+    simulation.plot_fitness_curves()
     pygame.quit()
     sys.exit(0)
 

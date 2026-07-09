@@ -19,8 +19,9 @@ from core.constants import (
     FOOD_SOURCE_COOLDOWN,
     ZONE_BOUNDARY_X,
     FOOD_SOURCE_LEFT_ZONE_PROB,
+    FOOD_SOURCE_RADIUS,
 )
-from world.food import FoodSource
+from world.food import FoodSource, is_in_lake
 
 if TYPE_CHECKING:
     from world.world import World
@@ -61,10 +62,11 @@ class EnvironmentSystem:
 
         # --- Update existing sources and collect spawned food ---
         current_food_count = len(self.world.food_items)
+        lakes = getattr(self.world, "lakes", [])
         surviving_sources: list[FoodSource] = []
 
         for source in self.food_sources:
-            new_food = source.update(dt, current_food_count)
+            new_food = source.update(dt, current_food_count, lakes=lakes)
             self.world.food_items.extend(new_food)
             current_food_count += len(new_food)
 
@@ -77,11 +79,15 @@ class EnvironmentSystem:
         self.source_cooldown -= dt
         if self.source_cooldown <= 0.0 and len(self.food_sources) < MAX_FOOD_SOURCES:
             margin = 50.0
-            if rng.random() < FOOD_SOURCE_LEFT_ZONE_PROB:
-                x = rng.uniform(margin, ZONE_BOUNDARY_X - margin)
-            else:
-                x = rng.uniform(ZONE_BOUNDARY_X + margin, WORLD_WIDTH - margin)
-            y = rng.uniform(margin, WORLD_HEIGHT - margin)
-            new_source = FoodSource(np.array([x, y]), rng)
-            self.food_sources.append(new_source)
-            self.source_cooldown = FOOD_SOURCE_COOLDOWN
+            for _ in range(20):
+                if rng.random() < FOOD_SOURCE_LEFT_ZONE_PROB:
+                    x = rng.uniform(margin, ZONE_BOUNDARY_X - margin)
+                else:
+                    x = rng.uniform(ZONE_BOUNDARY_X + margin, WORLD_WIDTH - margin)
+                y = rng.uniform(margin, WORLD_HEIGHT - margin)
+                pos = np.array([x, y])
+                if not is_in_lake(pos, FOOD_SOURCE_RADIUS, lakes):
+                    new_source = FoodSource(pos, rng)
+                    self.food_sources.append(new_source)
+                    self.source_cooldown = FOOD_SOURCE_COOLDOWN
+                    break

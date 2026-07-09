@@ -30,6 +30,7 @@ from species.spider_constants import (
     FITNESS_ENEMIES_TOUCHED_WEIGHT,
     FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT,
     FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT,
+    FITNESS_DISTANCE_WALKED_WEIGHT,
 )
 
 
@@ -86,4 +87,5 @@ class Spider(Creature):
             + self.enemies_touched * FITNESS_ENEMIES_TOUCHED_WEIGHT
             + self.times_eating_for_nothing * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
             + self.times_attacking_for_nothing * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
+            + self.distance_walked * FITNESS_DISTANCE_WALKED_WEIGHT
         )

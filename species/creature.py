@@ -108,6 +108,7 @@ class Creature(ABC):
         self.food_eaten: int = 0
         self.survival_time: float = 0.0
         self.enemies_touched: int = 0
+        self.distance_walked: float = 0.0
         self.times_eating_for_nothing: int = 0
         self.times_attacking_for_nothing: int = 0
         self.follow_pheromones: float = 0.0
@@ -204,11 +205,15 @@ class Creature(ABC):
                 self.speed = speed_signal * effective_max_speed
                 dx = math.cos(self.direction) * self.speed * dt
                 dy = math.sin(self.direction) * self.speed * dt
+                old_x, old_y = self.position[0], self.position[1]
                 self.position[0] += dx
                 self.position[1] += dy
 
                 self.position[0] = clamp(self.position[0], 0.0, float(WORLD_WIDTH))
                 self.position[1] = clamp(self.position[1], 0.0, float(WORLD_HEIGHT))
+                self.distance_walked += math.sqrt(
+                    (self.position[0] - old_x) ** 2 + (self.position[1] - old_y) ** 2
+                )
 
         # --- Health decay (always applies, even while eating) ---
         self.health -= HEALTH_DECAY_RATE * dt
@@ -260,5 +265,5 @@ class Creature(ABC):
         eating = " [EATING]" if self.is_eating else ""
         return (
             f"{self.__class__.__name__}({status}{eating}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
-            f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched})"
+            f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched}, dist={self.distance_walked:.0f})"
         )

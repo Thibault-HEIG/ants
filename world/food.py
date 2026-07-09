@@ -8,7 +8,7 @@ FoodSource — a temporary spawner that generates food items around itself.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -24,6 +24,24 @@ from core.constants import (
     FOOD_SOURCE_SPAWN_RADIUS,
 )
 from world.entity import Entity
+
+
+def is_in_lake(pos: np.ndarray, radius: float, lakes: list[Any] | None = None) -> bool:
+    """Check if a circle at pos with given radius overlaps any lake obstacle."""
+    if not lakes:
+        return False
+    px = float(pos[0])
+    py = float(pos[1])
+    for lake in lakes:
+        lx = float(lake.position[0])
+        ly = float(lake.position[1])
+        lradius = float(getattr(lake, "radius", 50.0))
+        dx = px - lx
+        dy = py - ly
+        min_dist = lradius + radius
+        if dx * dx + dy * dy < min_dist * min_dist:
+            return True
+    return False
 
 
 class Food(Entity):
@@ -95,7 +113,12 @@ class FoodSource:
         """True when this source has outlived its duration."""
         return self.lifetime <= 0.0
 
-    def update(self, dt: float, current_food_count: int) -> list[Food]:
+    def update(
+        self,
+        dt: float,
+        current_food_count: int,
+        lakes: list[Any] | None = None,
+    ) -> list[Food]:
         """Advance the source by one tick and return any newly spawned food.
 
         Parameters
@@ -104,6 +127,8 @@ class FoodSource:
             Time step in seconds.
         current_food_count : int
             Current global food count (used to respect MAX_FOOD cap).
+        lakes : list[Any] | None, optional
+            Static lake obstacles to avoid when scattering food.
 
         Returns
         -------
@@ -120,11 +145,19 @@ class FoodSource:
         while self.spawn_timer >= 1.0 and (current_food_count + len(spawned)) < MAX_FOOD:
             self.spawn_timer -= 1.0
 
-            # Scatter position around the source centre
-            angle = self._rng.uniform(0, 2 * np.pi)
-            dist = self._rng.uniform(0, FOOD_SOURCE_SPAWN_RADIUS)
-            offset = np.array([np.cos(angle) * dist, np.sin(angle) * dist])
-            food_pos = self.position + offset
+            # Scatter position around the source centre, avoiding lakes
+            food_pos = None
+            for _ in range(10):
+                angle = self._rng.uniform(0, 2 * np.pi)
+                dist = self._rng.uniform(0, FOOD_SOURCE_SPAWN_RADIUS)
+                offset = np.array([np.cos(angle) * dist, np.sin(angle) * dist])
+                candidate = self.position + offset
+                if not is_in_lake(candidate, float(FOOD_RADIUS), lakes):
+                    food_pos = candidate
+                    break
+
+            if food_pos is None:
+                continue
 
             # Choose sugar vs seed based on configured weights
             if self._rng.random() < SUGAR_WEIGHT:

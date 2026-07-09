@@ -33,6 +33,7 @@ from species.ant_constants import (
     FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT,
     PHEROMONE_STRENGTH,
     FITNESS_FOLLOW_PHEROMONES_WEIGHT,
+    FITNESS_DISTANCE_WALKED_WEIGHT,
 )
 
 
@@ -112,4 +113,5 @@ class Ant(Creature):
             + self.times_eating_for_nothing * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
             + self.times_attacking_for_nothing * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
             + self.follow_pheromones * FITNESS_FOLLOW_PHEROMONES_WEIGHT
+            + self.distance_walked * FITNESS_DISTANCE_WALKED_WEIGHT
         )
