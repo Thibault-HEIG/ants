@@ -12,8 +12,8 @@ import math
 # ---------------------------------------------------------------------------
 # World geometry
 # ---------------------------------------------------------------------------
-WORLD_WIDTH: int = 1200   # pixels
-WORLD_HEIGHT: int = 800   # pixels
+WORLD_WIDTH: int = 1000   # pixels
+WORLD_HEIGHT: int = 900   # pixels
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ EAT_PICKUP_RADIUS: float = 20.0            # must be within this radius of food 
 # ---------------------------------------------------------------------------
 # Sensor system
 # ---------------------------------------------------------------------------
-SENSOR_ANGLE: float = math.radians(50)  # ±50° from heading → 100° total FOV
+SENSOR_ANGLE: float = math.radians(80)  # ±80° from heading → 160° total FOV
 MAX_DENSITY_COUNT: int = 10             # normalisation cap: 10+ nearby → 1.0
 
 # ---------------------------------------------------------------------------

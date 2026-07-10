@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pygame
+import pygame._sdl2.video as sdl2_video
 
 from core.constants import (
     WORLD_WIDTH,
@@ -26,24 +27,28 @@ from core.constants import (
     ZONE_BOUNDARY_X,
     HUD_FONT_SIZE,
     HUD_ACCENT_COLOR,
-    SPIDER_ACCENT_COLOR,
-    FOOD_SOURCE_RADIUS,
+    SPIDER_ACCENT_COLOR
 )
-from rendering.ui import draw_health_bar, draw_hud_panel
+from rendering.ui import (
+    draw_health_bar,
+    draw_fps_box,
+    draw_window_b_panel,
+    LiveFitnessChart,
+)
 
 if TYPE_CHECKING:
     from world.world import World
 
 
 class Renderer:
-    """Handles all visual output using Pygame.
+    """Handles dual-window visual output using Pygame _sdl2.video.
 
     Parameters
     ----------
     width : int
-        Window width in pixels.
+        Simulation Window A width in pixels.
     height : int
-        Window height in pixels.
+        Simulation Window A height in pixels.
     """
 
     def __init__(self, width: int = WORLD_WIDTH, height: int = WORLD_HEIGHT) -> None:
@@ -52,8 +57,26 @@ class Renderer:
 
         self.width: int = width
         self.height: int = height
-        self.screen: pygame.Surface = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("2D Ecosystem Simulation — Advanced OOP Engine")
+
+        # Dual window SDL2 architecture
+        self.win_a = sdl2_video.Window("Ants vs Spiders — Simulation View", size=(self.width, self.height))
+        self.rend_a = sdl2_video.Renderer(self.win_a)
+        self.surface_a = pygame.Surface((self.width, self.height))
+
+        self.stats_width: int = 680
+        self.stats_height: int = 720
+        self.win_b = sdl2_video.Window("Ants vs Spiders — Stats & Chart Panel", size=(self.stats_width, self.stats_height))
+        self.rend_b = sdl2_video.Renderer(self.win_b)
+        self.surface_b = pygame.Surface((self.stats_width, self.stats_height))
+        self.window_b_open: bool = True
+
+        try:
+            self.win_a.position = (50, 50)
+            self.win_b.position = (50 + self.width + 10, 50)
+        except Exception:
+            pass
+
+        self.chart = LiveFitnessChart(width=self.stats_width - 28, height=320)
 
         self.clock: pygame.time.Clock = pygame.time.Clock()
         self.font: pygame.font.Font = pygame.font.SysFont("Consolas, Courier, monospace", HUD_FONT_SIZE, bold=True)
@@ -79,7 +102,11 @@ class Renderer:
     def _load_sprite(self, name: str, filepath: str, size: tuple[int, int]) -> None:
         try:
             if os.path.exists(filepath):
-                image = pygame.image.load(filepath).convert_alpha()
+                image = pygame.image.load(filepath)
+                try:
+                    image = image.convert_alpha()
+                except Exception:
+                    pass
                 self.sprites[name] = pygame.transform.smoothscale(image, size)
         except Exception:
             pass  # Fallback to geometric shapes if loading fails
@@ -98,162 +125,164 @@ class Renderer:
         """Toggle visualization of sensory rays."""
         self.show_sensors = not self.show_sensors
 
+    def hide_window_b(self) -> None:
+        """Hide Window B without destroying the SDL2 window object."""
+        self.win_b.hide()
+        self.window_b_open = False
+
+    def toggle_window_b(self) -> None:
+        """Toggle Window B visibility."""
+        if self.window_b_open:
+            self.win_b.hide()
+            self.window_b_open = False
+        else:
+            self.win_b.show()
+            self.window_b_open = True
+
     def render(self, world: World, simulation: Any | None = None) -> None:
-        """Render one full frame of the simulation."""
-        # Update animation timer
+        """Render one full frame across dual SDL2 windows."""
         self._pulse_timer += 1.0 / 60.0
+        ultra_mode = getattr(simulation, "ultra_mode", False) if simulation else False
 
-        # 1. Background and Zones
-        self.screen.fill(BG_COLOR)
+        # --- 1. Render Window A (Simulation View) ---
+        if ultra_mode:
+            # Static black background; skip all creature/food/pheromone drawing
+            self.surface_a.fill((0, 0, 0))
+        else:
+            self.surface_a.fill(BG_COLOR)
+            left_zone = pygame.Rect(0, 0, int(ZONE_BOUNDARY_X), self.height)
+            right_zone = pygame.Rect(int(ZONE_BOUNDARY_X), 0, self.width - int(ZONE_BOUNDARY_X), self.height)
+            pygame.draw.rect(self.surface_a, ZONE_DANGER_COLOR, left_zone)
+            pygame.draw.rect(self.surface_a, ZONE_SAFE_COLOR, right_zone)
 
-        left_zone = pygame.Rect(0, 0, int(ZONE_BOUNDARY_X), self.height)
-        right_zone = pygame.Rect(int(ZONE_BOUNDARY_X), 0, self.width - int(ZONE_BOUNDARY_X), self.height)
-        pygame.draw.rect(self.screen, ZONE_DANGER_COLOR, left_zone)
-        pygame.draw.rect(self.screen, ZONE_SAFE_COLOR, right_zone)
+            dash_len = 10
+            for y in range(0, self.height, dash_len * 2):
+                pygame.draw.line(self.surface_a, (70, 80, 90), (ZONE_BOUNDARY_X, y), (ZONE_BOUNDARY_X, min(self.height, y + dash_len)), 1)
 
-        # Boundary dashed line
-        dash_len = 10
-        for y in range(0, self.height, dash_len * 2):
-            pygame.draw.line(self.screen, (70, 80, 90), (ZONE_BOUNDARY_X, y), (ZONE_BOUNDARY_X, min(self.height, y + dash_len)), 1)
+            if getattr(world, "pheromone_grid", None) is not None:
+                cell_size = getattr(world, "pheromone_cell_size", 10.0)
+                grid = world.pheromone_grid
+                xs, ys = np.where(grid > 0.01)
+                for x_idx, y_idx in zip(xs, ys):
+                    strength = float(grid[x_idx, y_idx])
+                    opacity = min(255, int((strength / 2.0) * 255))
+                    if opacity > 5:
+                        s = pygame.Surface((int(cell_size), int(cell_size)), pygame.SRCALPHA)
+                        s.fill((255, 255, 150, opacity))
+                        self.surface_a.blit(s, (int(x_idx * cell_size), int(y_idx * cell_size)))
 
-        # 1.2. Pheromone Trails & Narrow Grid (Grid only when S is pressed)
-        if getattr(world, "pheromone_grid", None) is not None:
-            cell_size = getattr(world, "pheromone_cell_size", 10.0)
-            grid = world.pheromone_grid
-            xs, ys = np.where(grid > 0.01)
-            for x_idx, y_idx in zip(xs, ys):
-                strength = float(grid[x_idx, y_idx])
-                opacity = min(255, int((strength / 2.0) * 255))
-                if opacity > 5:
-                    s = pygame.Surface((int(cell_size), int(cell_size)), pygame.SRCALPHA)
-                    s.fill((255, 255, 150, opacity))
-                    self.screen.blit(s, (int(x_idx * cell_size), int(y_idx * cell_size)))
-
-            if self.show_sensors:
-                gw, gh = grid.shape
-                for gx in range(gw + 1):
-                    x_pos = int(gx * cell_size)
-                    pygame.draw.line(self.screen, (50, 55, 65), (x_pos, 0), (x_pos, self.height), 1)
-                for gy in range(gh + 1):
-                    y_pos = int(gy * cell_size)
-                    pygame.draw.line(self.screen, (50, 55, 65), (0, y_pos), (self.width, y_pos), 1)
-
-        # 1.3. Lakes
-        for lake in getattr(world, "lakes", []):
-            lx, ly = int(lake.position[0]), int(lake.position[1])
-            lrad = int(getattr(lake, "radius", 50.0))
-            pygame.draw.circle(self.screen, (25, 60, 110), (lx, ly), lrad)
-            pygame.draw.circle(self.screen, (45, 95, 165), (lx, ly), lrad, 3)
-
-        # 1.4. Kingdoms
-        kingdoms = world.kingdoms.values() if isinstance(getattr(world, "kingdoms", None), dict) else getattr(world, "kingdoms", [])
-        for kingdom in kingdoms:
-            kx, ky = int(kingdom.position[0]), int(kingdom.position[1])
-            kname = getattr(kingdom, "name", "")
-            sprite = self.sprites.get(kname)
-            if sprite is not None:
-                rect = sprite.get_rect(center=(kx, ky))
-                self.screen.blit(sprite, rect)
-            else:
-                pygame.draw.circle(self.screen, (100, 80, 60), (kx, ky), int(getattr(kingdom, "spawn_radius", 60.0)), 2)
-
-        # 2. Food Items — typed sprites
-        for food in world.food_items:
-            if getattr(food, "consumed", False):
-                continue
-            fx, fy = int(food.position[0]), int(food.position[1])
-            food_type = getattr(food, "food_type", None)
-            sprite = self.sprites.get(food_type) if food_type else None
-
-            if sprite is not None:
-                rect = sprite.get_rect(center=(fx, fy))
-                self.screen.blit(sprite, rect)
-            else:
-                # Fallback geometric rendering
-                pygame.draw.circle(self.screen, (80, 220, 100), (fx, fy), int(food.radius))
-                pygame.draw.circle(self.screen, (150, 255, 170), (fx, fy), max(1, int(food.radius - 2)))
-
-        # 4. Living Creatures
-        for cls, alive_list in world.creatures.items():
-            species_name = getattr(cls, "species_name", cls.__name__)
-            for creature in alive_list:
-                if not getattr(creature, "alive", False):
-                    continue
                 if self.show_sensors:
-                    self._draw_sensors(creature)
-                self._draw_creature(creature, species_name, is_dead=False)
+                    gw, gh = grid.shape
+                    for gx in range(gw + 1):
+                        x_pos = int(gx * cell_size)
+                        pygame.draw.line(self.surface_a, (50, 55, 65), (x_pos, 0), (x_pos, self.height), 1)
+                    for gy in range(gh + 1):
+                        y_pos = int(gy * cell_size)
+                        pygame.draw.line(self.surface_a, (50, 55, 65), (0, y_pos), (self.width, y_pos), 1)
 
-        # 5. HUD Panel
-        creature_stats = {}
-        for cls in world.active_species:
-            name = getattr(cls, "species_name", cls.__name__)
-            alive = len(world.creatures.get(cls, []))
-            total = simulation.get_total_spawned(cls) if simulation and hasattr(simulation, "get_total_spawned") else alive
-            creature_stats[name] = (alive, total)
+            for lake in getattr(world, "lakes", []):
+                lx, ly = int(lake.position[0]), int(lake.position[1])
+                lrad = int(getattr(lake, "radius", 50.0))
+                pygame.draw.circle(self.surface_a, (25, 60, 110), (lx, ly), lrad)
+                pygame.draw.circle(self.surface_a, (45, 95, 165), (lx, ly), lrad, 3)
 
-        speed = getattr(simulation, "speed_multiplier", 1.0) if simulation else 1.0
+            kingdoms = world.kingdoms.values() if isinstance(getattr(world, "kingdoms", None), dict) else getattr(world, "kingdoms", [])
+            for kingdom in kingdoms:
+                kx, ky = int(kingdom.position[0]), int(kingdom.position[1])
+                kname = getattr(kingdom, "name", "")
+                sprite = self.sprites.get(kname)
+                if sprite is not None:
+                    rect = sprite.get_rect(center=(kx, ky))
+                    self.surface_a.blit(sprite, rect)
+                else:
+                    pygame.draw.circle(self.surface_a, (100, 80, 60), (kx, ky), int(getattr(kingdom, "spawn_radius", 60.0)), 2)
 
-        draw_hud_panel(
-            self.screen,
-            self.font,
-            self.width,
-            round_time=world.round_time,
-            sim_speed=speed,
-            fps=self.clock.get_fps(),
-            show_sensors=self.show_sensors,
-            creature_stats=creature_stats,
-        )
+            for food in world.food_items:
+                if getattr(food, "consumed", False):
+                    continue
+                fx, fy = int(food.position[0]), int(food.position[1])
+                food_type = getattr(food, "food_type", None)
+                sprite = self.sprites.get(food_type) if food_type else None
+                if sprite is not None:
+                    rect = sprite.get_rect(center=(fx, fy))
+                    self.surface_a.blit(sprite, rect)
+                else:
+                    pygame.draw.circle(self.surface_a, (80, 220, 100), (fx, fy), int(food.radius))
+                    pygame.draw.circle(self.surface_a, (150, 255, 170), (fx, fy), max(1, int(food.radius - 2)))
 
-        pygame.display.flip()
-        self.clock.tick(60)
+            for cls, alive_list in world.creatures.items():
+                species_name = getattr(cls, "species_name", cls.__name__)
+                for creature in alive_list:
+                    if not getattr(creature, "alive", False):
+                        continue
+                    if self.show_sensors:
+                        self._draw_sensors(creature)
+                    self._draw_creature(creature, species_name, is_dead=False)
+
+        # Draw small FPS box top-right in Window A
+        draw_fps_box(self.surface_a, self.font, self.clock.get_fps(), self.width, ultra_mode=ultra_mode)
+
+        # Blit surface_a to sdl2 Renderer A
+        tex_a = sdl2_video.Texture.from_surface(self.rend_a, self.surface_a)
+        self.rend_a.clear()
+        self.rend_a.blit(tex_a)
+        self.rend_a.present()
+
+        # --- 2. Render Window B (Stats & Chart Panel) ---
+        if self.window_b_open:
+            draw_window_b_panel(self.surface_b, self.font, world, simulation, self.chart)
+            tex_b = sdl2_video.Texture.from_surface(self.rend_b, self.surface_b)
+            self.rend_b.clear()
+            self.rend_b.blit(tex_b)
+            self.rend_b.present()
+
+        # Update clock
+        if ultra_mode:
+            self.clock.tick()
+        else:
+            self.clock.tick(60)
 
     def _draw_creature(self, creature: Any, species_name: str, is_dead: bool) -> None:
         cx, cy = int(creature.position[0]), int(creature.position[1])
         angle_deg = -math.degrees(creature.direction) - 90.0
 
         if not is_dead:
-            # 1. Light red shadow behind attacking creatures (replaces big attack circle)
             if getattr(creature, "is_attacking", False):
                 shadow = self._get_shadow_surface(creature.radius, (240, 60, 60))
-                self.screen.blit(shadow, shadow.get_rect(center=(cx, cy)))
+                self.surface_a.blit(shadow, shadow.get_rect(center=(cx, cy)))
 
-            # 2. Light white shadow behind eating creatures (replaces eating ring circle)
             if getattr(creature, "is_eating", False):
                 shadow = self._get_shadow_surface(creature.radius, (255, 255, 255))
-                self.screen.blit(shadow, shadow.get_rect(center=(cx, cy)))
+                self.surface_a.blit(shadow, shadow.get_rect(center=(cx, cy)))
 
         sprite = self.sprites.get(species_name)
         if sprite is not None:
             if is_dead:
-                # Tint dead sprite gray
                 img = sprite.copy()
                 img.fill((100, 100, 100, 128), special_flags=pygame.BLEND_RGBA_MULT)
             else:
                 img = sprite
             rotated = pygame.transform.rotate(img, angle_deg)
             rect = rotated.get_rect(center=(cx, cy))
-            self.screen.blit(rotated, rect)
+            self.surface_a.blit(rotated, rect)
         else:
-            # Fallback geometric rendering
             color = HUD_ACCENT_COLOR if species_name == "Ant" else SPIDER_ACCENT_COLOR
             if is_dead:
                 color = (100, 100, 100)
-            pygame.draw.circle(self.screen, color, (cx, cy), int(creature.radius))
-            # Heading indicator line
+            pygame.draw.circle(self.surface_a, color, (cx, cy), int(creature.radius))
             hx = cx + int(math.cos(creature.direction) * creature.radius * 1.5)
             hy = cy + int(math.sin(creature.direction) * creature.radius * 1.5)
-            pygame.draw.line(self.screen, (255, 255, 255), (cx, cy), (hx, hy), 2)
+            pygame.draw.line(self.surface_a, (255, 255, 255), (cx, cy), (hx, hy), 2)
 
         if not is_dead:
-            draw_health_bar(self.screen, float(cx), float(cy), creature.radius, creature.health, creature.max_health)
+            draw_health_bar(self.surface_a, float(cx), float(cy), creature.radius, creature.health, creature.max_health)
 
     def _draw_sensors(self, creature: Any) -> None:
         cx, cy = float(creature.position[0]), float(creature.position[1])
         s_range = getattr(creature.sensors, 'sensor_range', 100.0)
 
-        # Draw all 8 vision rays
         for ray in creature.sensors.rays:
             ray_angle = creature.direction + ray.angle_offset
             ex = cx + math.cos(ray_angle) * s_range
             ey = cy + math.sin(ray_angle) * s_range
-            pygame.draw.line(self.screen, (100, 120, 140), (int(cx), int(cy)), (int(ex), int(ey)), 1)
+            pygame.draw.line(self.surface_a, (100, 120, 140), (int(cx), int(cy)), (int(ex), int(ey)), 1)

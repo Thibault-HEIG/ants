@@ -22,6 +22,7 @@ from species.spider_constants import (
     SPIDER_ATTACK_COST,
     SPIDER_EATING_TIME,
     SPIDER_SENSOR_RANGE,
+    SPIDER_SENSOR_ANGLE,
     SPIDER_REPRODUCTION_THRESHOLD,
     MAX_SPIDERS,
     DENSITY_RADIUS_SPIDER,
@@ -55,6 +56,7 @@ class Spider(Creature):
     attack_cost: float = SPIDER_ATTACK_COST
     eating_time: float = SPIDER_EATING_TIME
     sensor_range: float = SPIDER_SENSOR_RANGE
+    sensor_angle: float = SPIDER_SENSOR_ANGLE
     reproduction_threshold: float = SPIDER_REPRODUCTION_THRESHOLD
     max_population: int = MAX_SPIDERS
     initial_count: int = SPIDER_COUNT
@@ -72,6 +74,7 @@ class Spider(Creature):
             attack_cost=SPIDER_ATTACK_COST,
             eating_time=SPIDER_EATING_TIME,
             sensor_range=SPIDER_SENSOR_RANGE,
+            sensor_angle=SPIDER_SENSOR_ANGLE,
             density_radius=DENSITY_RADIUS_SPIDER,
         )
 

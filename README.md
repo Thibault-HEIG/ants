@@ -12,10 +12,7 @@ A real-time co-evolutionary simulation where **ants** and **spiders** each evolv
 # Install dependencies
 pip install numpy pygame
 
-# Run the simulation from the project root
-python3 main.py
-
-# Or execute the engine module directly
+# Run the simulation
 python3 -m core.engine
 ```
 
@@ -23,10 +20,13 @@ python3 -m core.engine
 
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` | Increase / decrease simulation speed (0.5×–64×) |
+| `↑` / `↓` | Increase / decrease simulation speed (0.5×–256×) |
 | `Space` | Pause / unpause |
 | `S` | Toggle vision ray / sensor visualization |
 | `R` | Restart simulation |
+| `T` | Activate ultra performance mode (no rendering) |
+| `P` | Save top brains in a JSON file |
+| `F` | Print the fitness curve in the terminal |
 | `Escape` | Quit |
 
 ---

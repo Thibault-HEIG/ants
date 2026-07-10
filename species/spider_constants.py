@@ -5,6 +5,7 @@ spider_constants.py — Dedicated Parameters and Fitness Weights for Spiders
 Stores all species-specific configuration, physical limitations, sensory ranges,
 and fitness weights for the Spider species.
 """
+from core.constants import SENSOR_ANGLE
 
 # Population and Lifecycle
 SPIDER_COUNT: int = 5
@@ -22,7 +23,8 @@ SPIDER_ATTACK_COST: float = 30.0
 SPIDER_EATING_TIME: float = 2.0
 
 # Sensory Capacities
-SPIDER_SENSOR_RANGE: float = 250.0
+SPIDER_SENSOR_RANGE: float = 150.0
+SPIDER_SENSOR_ANGLE: float = SENSOR_ANGLE
 DENSITY_RADIUS_SPIDER: float = SPIDER_SENSOR_RANGE
 
 # Fitness Evaluation Weights

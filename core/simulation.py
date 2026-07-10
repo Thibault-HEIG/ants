@@ -47,6 +47,8 @@ class Simulation:
 
         self.world: World = World(self.rng, active_species=self.active_species)
         self.running: bool = True
+        self.ultra_mode: bool = False
+        self.ticks_since_render: int = 0
         self.speed_idx: int = 1  # Index 1 -> 1x speed in SPEED_MULTIPLIERS
         self.loaded_genomes: dict[type, list[np.ndarray]] | None = None
 
@@ -74,7 +76,7 @@ class Simulation:
 
         os.makedirs("saves", exist_ok=True)
         # Format: yy.mm.dd.hh.mm (e.g. 26-06-15-09-30.json)
-        filename = datetime.now().strftime("%y.%m.%d.%H.%M.json")
+        filename = datetime.now().strftime("%y-%m-%d-%H-%M.json")
         filepath = os.path.join("saves", filename)
 
         save_data = []

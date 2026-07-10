@@ -5,6 +5,7 @@ ant_constants.py — Dedicated Parameters and Fitness Weights for Ants
 Stores all species-specific configuration, physical limitations, sensory ranges,
 and fitness weights for the Ant species.
 """
+from core.constants import SENSOR_ANGLE
 
 # Population and Lifecycle
 ANT_COUNT: int = 50
@@ -22,7 +23,8 @@ ANT_ATTACK_COST: float = 20.0
 ANT_EATING_TIME: float = 1.0
 
 # Sensory Capacities
-ANT_SENSOR_RANGE: float = 150.0
+ANT_SENSOR_RANGE: float = 100.0
+ANT_SENSOR_ANGLE: float = SENSOR_ANGLE
 DENSITY_RADIUS_ANT: float = ANT_SENSOR_RANGE
 
 # Fitness Evaluation Weights

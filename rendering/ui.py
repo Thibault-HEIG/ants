@@ -139,3 +139,246 @@ def draw_hud_panel(
         right_lines.append((f"Max Touches  : {max_touch}", HUD_TEXT_COLOR))
 
     _draw_floating_box(surface, font, right_lines, pos_x=width - 15, pos_y=15, align_right=True, border_color=(255, 180, 60, 150))
+
+
+def draw_fps_box(surface: pygame.Surface, font: pygame.font.Font, fps: float, width: int, ultra_mode: bool = False) -> None:
+    """Draw a small FPS box in the top right of Window A."""
+    mode_str = "ULTRA" if ultra_mode else "NORMAL"
+    color = (255, 100, 100) if ultra_mode else (150, 255, 180)
+    lines = [
+        (f"FPS: {fps:.0f} [{mode_str}]", color),
+    ]
+    _draw_floating_box(surface, font, lines, pos_x=width - 15, pos_y=15, align_right=True, border_color=color)
+
+
+def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
+    """Compute living/dead population and best/average vitals & fitness for a species."""
+    living = world.creatures.get(cls, [])
+    dead = world.dead_creatures.get(cls, [])
+    max_pop = getattr(cls, "max_population", 100)
+    alive_count = len(living)
+    dead_count = len(dead)
+    all_creatures = living + dead
+
+    if all_creatures:
+        best_fitness = max(c.compute_fitness() for c in all_creatures)
+        best_food = max(getattr(c, "food_eaten", 0) for c in all_creatures)
+        best_enemies = max(getattr(c, "enemies_touched", 0) for c in all_creatures)
+        best_lifetime = max(getattr(c, "survival_time", 0.0) for c in all_creatures)
+    else:
+        best_fitness = 0.0
+        best_food = 0
+        best_enemies = 0
+        best_lifetime = 0.0
+
+    if living:
+        avg_fitness = sum(c.compute_fitness() for c in living) / len(living)
+        avg_food = sum(getattr(c, "food_eaten", 0) for c in living) / len(living)
+        avg_enemies = sum(getattr(c, "enemies_touched", 0) for c in living) / len(living)
+        avg_lifetime = sum(getattr(c, "survival_time", 0.0) for c in living) / len(living)
+    elif all_creatures:
+        avg_fitness = sum(c.compute_fitness() for c in all_creatures) / len(all_creatures)
+        avg_food = sum(getattr(c, "food_eaten", 0) for c in all_creatures) / len(all_creatures)
+        avg_enemies = sum(getattr(c, "enemies_touched", 0) for c in all_creatures) / len(all_creatures)
+        avg_lifetime = sum(getattr(c, "survival_time", 0.0) for c in all_creatures) / len(all_creatures)
+    else:
+        avg_fitness = 0.0
+        avg_food = 0.0
+        avg_enemies = 0.0
+        avg_lifetime = 0.0
+
+    return {
+        "alive": alive_count,
+        "max_pop": max_pop,
+        "dead": dead_count,
+        "best_fitness": float(best_fitness),
+        "avg_fitness": float(avg_fitness),
+        "best_food": int(best_food),
+        "avg_food": float(avg_food),
+        "best_enemies": int(best_enemies),
+        "avg_enemies": float(avg_enemies),
+        "best_lifetime": float(best_lifetime),
+        "avg_lifetime": float(avg_lifetime),
+    }
+
+
+class LiveFitnessChart:
+    """O(1) persistent static Surface live chart with 4 distinct series."""
+
+    def __init__(self, width: int = 640, height: int = 300) -> None:
+        self.width = width
+        self.height = height
+        self.surface = pygame.Surface((width, height))
+        self.history: list[tuple[float, float, float, float, float]] = []
+        self.last_update_time: float = -999.0
+        self.max_time: float = 300.0
+        self.max_fitness: float = 100.0
+        self.margin_left = 55
+        self.margin_bottom = 35
+        self.margin_top = 35
+        self.margin_right = 20
+        self.plot_w = self.width - self.margin_left - self.margin_right
+        self.plot_h = self.height - self.margin_top - self.margin_bottom
+        self.font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
+        self._init_surface()
+
+    def reset(self) -> None:
+        """Clear chart history and reset persistent surface."""
+        self.history.clear()
+        self.last_update_time = -999.0
+        self.max_time = 300.0
+        self.max_fitness = 100.0
+        self._init_surface()
+
+    def _init_surface(self) -> None:
+        self.surface.fill((16, 20, 26))
+        # Draw border
+        pygame.draw.rect(self.surface, (70, 80, 95), self.surface.get_rect(), 1)
+        # Draw plot area background
+        plot_rect = pygame.Rect(self.margin_left, self.margin_top, self.plot_w, self.plot_h)
+        pygame.draw.rect(self.surface, (22, 28, 36), plot_rect)
+        pygame.draw.rect(self.surface, (90, 105, 125), plot_rect, 1)
+
+        # Draw title & legend
+        title_img = self.font.render("LIVE FITNESS CHART (Every 30s)", True, (230, 235, 245))
+        self.surface.blit(title_img, (12, 10))
+
+        legends = [
+            ("Ant Best", (50, 240, 90)),
+            ("Ant Avg", (20, 150, 55)),
+            ("Spider Best", (255, 80, 80)),
+            ("Spider Avg", (180, 35, 35)),
+        ]
+        lx = self.width - 340
+        for label, color in legends:
+            pygame.draw.line(self.surface, color, (lx, 16), (lx + 15, 16), 2)
+            lbl_img = self.font.render(label, True, (210, 215, 225))
+            self.surface.blit(lbl_img, (lx + 20, 10))
+            lx += 80
+
+        self._draw_grid_labels()
+
+    def _draw_grid_labels(self) -> None:
+        # Draw horizontal grid lines and Y-axis labels
+        for frac in [0.0, 0.25, 0.5, 0.75, 1.0]:
+            y_val = self.max_fitness * frac
+            py = int(self.margin_top + self.plot_h * (1.0 - frac))
+            if 0 < frac < 1.0:
+                for x_dash in range(self.margin_left, self.margin_left + self.plot_w, 8):
+                    pygame.draw.line(self.surface, (45, 55, 68), (x_dash, py), (min(self.margin_left + self.plot_w, x_dash + 4), py), 1)
+            lbl = self.font.render(f"{y_val:.0f}", True, (150, 160, 175))
+            self.surface.blit(lbl, (self.margin_left - lbl.get_width() - 6, py - 6))
+
+        # Draw X-axis labels
+        for frac in [0.0, 0.5, 1.0]:
+            x_val = self.max_time * frac
+            px = int(self.margin_left + self.plot_w * frac)
+            lbl = self.font.render(f"{x_val:.0f}s", True, (150, 160, 175))
+            self.surface.blit(lbl, (px - lbl.get_width() // 2, self.margin_top + self.plot_h + 8))
+
+    def _to_pixel(self, sim_time: float, value: float) -> tuple[int, int]:
+        x_frac = max(0.0, min(1.0, sim_time / max(1e-5, self.max_time)))
+        y_frac = max(0.0, min(1.0, value / max(1e-5, self.max_fitness)))
+        px = int(self.margin_left + self.plot_w * x_frac)
+        py = int(self.margin_top + self.plot_h * (1.0 - y_frac))
+        return (px, py)
+
+    def _draw_segment(self, pt1: tuple[float, float, float, float, float], pt2: tuple[float, float, float, float, float]) -> None:
+        t1, ab1, aa1, sb1, sa1 = pt1
+        t2, ab2, aa2, sb2, sa2 = pt2
+        colors = [(50, 240, 90), (20, 150, 55), (255, 80, 80), (180, 35, 35)]
+        vals1 = [ab1, aa1, sb1, sa1]
+        vals2 = [ab2, aa2, sb2, sa2]
+        for c, v1, v2 in zip(colors, vals1, vals2):
+            p1 = self._to_pixel(t1, v1)
+            p2 = self._to_pixel(t2, v2)
+            pygame.draw.line(self.surface, c, p1, p2, 2)
+
+    def _redraw_all(self) -> None:
+        self._init_surface()
+        for i in range(1, len(self.history)):
+            self._draw_segment(self.history[i - 1], self.history[i])
+
+    def update(self, round_time: float, ant_best: float, ant_avg: float, spider_best: float, spider_avg: float) -> None:
+        """Record point every 30 seconds of simulation time and incrementally update persistent surface."""
+        if self.last_update_time < 0 or (round_time - self.last_update_time) >= 30.0:
+            point = (round_time, ant_best, ant_avg, spider_best, spider_avg)
+            self.history.append(point)
+            self.last_update_time = round_time
+
+            needs_redraw = False
+            if round_time > self.max_time * 0.98:
+                self.max_time = max(self.max_time * 2.0, round_time * 1.2)
+                needs_redraw = True
+            max_val = max(ant_best, ant_avg, spider_best, spider_avg)
+            if max_val > self.max_fitness * 0.98:
+                self.max_fitness = max(self.max_fitness * 1.5, max_val * 1.2)
+                needs_redraw = True
+
+            if needs_redraw or len(self.history) == 1:
+                self._redraw_all()
+            else:
+                self._draw_segment(self.history[-2], self.history[-1])
+
+
+_stats_font: pygame.font.Font | None = None
+
+
+def draw_window_b_panel(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    world: Any,
+    simulation: Any,
+    chart: LiveFitnessChart,
+) -> None:
+    """Render comprehensive stats panel and live chart on Window B surface."""
+    surface.fill((16, 20, 26))
+
+    global _stats_font
+    if _stats_font is None:
+        _stats_font = pygame.font.SysFont("Consolas, Courier, monospace", 14, bold=True)
+
+    # Import species classes dynamically to compute metrics
+    from species.ant import Ant
+    from species.spider import Spider
+
+    ant_m = get_species_metrics(world, Ant)
+    spider_m = get_species_metrics(world, Spider)
+
+    # Update live chart every 30s
+    chart.update(
+        world.round_time,
+        ant_m["best_fitness"],
+        ant_m["avg_fitness"],
+        spider_m["best_fitness"],
+        spider_m["avg_fitness"],
+    )
+
+    ultra_mode = getattr(simulation, "ultra_mode", False)
+    sim_speed = getattr(simulation, "speed_multiplier", 1.0)
+
+    top_lines: list[tuple[str, tuple[int, int, int]]] = [
+        ("=== ECOSYSTEM STATS & EVOLUTION MONITOR ===", (0, 220, 230)),
+        (f"Time: {world.round_time:.1f}s | Speed: {sim_speed}x | Ultra Mode [T]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
+        ("---------------------------------------------------------", (60, 75, 90)),
+        (f"[ANT STATS]      Alive: {ant_m['alive']}/{ant_m['max_pop']} (Dead: {ant_m['dead']})", HUD_ACCENT_COLOR),
+        (f"  Fitness        Best: {ant_m['best_fitness']:6.1f} | Avg: {ant_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Food Eaten     Best: {ant_m['best_food']:6d} | Avg: {ant_m['avg_food']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Enemies Touch  Best: {ant_m['best_enemies']:6d} | Avg: {ant_m['avg_enemies']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Lifetime       Best: {ant_m['best_lifetime']:6.1f}s| Avg: {ant_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
+        ("---------------------------------------------------------", (60, 75, 90)),
+        (f"[SPIDER STATS]   Alive: {spider_m['alive']}/{spider_m['max_pop']} (Dead: {spider_m['dead']})", SPIDER_ACCENT_COLOR),
+        (f"  Fitness        Best: {spider_m['best_fitness']:6.1f} | Avg: {spider_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Food Eaten     Best: {spider_m['best_food']:6d} | Avg: {spider_m['avg_food']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Enemies Touch  Best: {spider_m['best_enemies']:6d} | Avg: {spider_m['avg_enemies']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Lifetime       Best: {spider_m['best_lifetime']:6.1f}s| Avg: {spider_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
+        ("---------------------------------------------------------", (60, 75, 90)),
+        ("[KEYS] [T] Ultra Mode  [SPACE] Pause  [R] Reset  [P] Save", (210, 215, 225)),
+        ("       [S] Sensors     [F/C] Plot     [1-8] Spd  [W] WinB", (210, 215, 225)),
+    ]
+
+    _draw_floating_box(surface, _stats_font, top_lines, pos_x=14, pos_y=12, align_right=False, border_color=(0, 173, 181, 180))
+
+    # Blit live chart onto bottom of Window B
+    chart_rect = chart.surface.get_rect(topleft=(14, 385))
+    surface.blit(chart.surface, chart_rect)

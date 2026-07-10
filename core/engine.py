@@ -43,15 +43,28 @@ def main() -> None:
             if event.type == pygame.QUIT:
                 simulation.running = False
                 break
+            elif event.type == getattr(pygame, "WINDOWCLOSE", 32787):
+                win_attr = getattr(event, "window", None)
+                win_id = getattr(win_attr, "id", win_attr)
+                if win_id == renderer.win_a.id:
+                    simulation.running = False
+                    break
+                elif win_id == renderer.win_b.id:
+                    renderer.hide_window_b()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     simulation.running = False
                     break
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_t:
+                    simulation.ultra_mode = not getattr(simulation, "ultra_mode", False)
+                elif event.key == pygame.K_w or event.key == pygame.K_b:
+                    renderer.toggle_window_b()
                 elif event.key == pygame.K_r:
                     # Reset simulation world and spawn initial populations or reload save
                     simulation.reset()
+                    renderer.chart.reset()
                 elif event.key == pygame.K_p:
                     # Save top 10% brains to JSON file
                     simulation.save_top_brains()
@@ -70,19 +83,32 @@ def main() -> None:
 
         if not paused and simulation.running:
             dt = base_dt * simulation.speed_multiplier
-            # Cap maximum single-step dt to prevent tunneling at very high speeds
             max_step = 0.1
             remaining = dt
             while remaining > 0:
+                if not simulation.running:
+                    break
                 step_dt = min(remaining, max_step)
                 simulation.step(step_dt)
                 remaining -= step_dt
+            simulation.ticks_since_render += 1
 
         if simulation.running:
-            renderer.render(simulation.world, simulation)
+            if getattr(simulation, "ultra_mode", False):
+                if simulation.ticks_since_render >= 10:
+                    renderer.render(simulation.world, simulation)
+                    simulation.ticks_since_render = 0
+            else:
+                renderer.render(simulation.world, simulation)
+                simulation.ticks_since_render = 0
 
     # Always plot final fitness curves in terminal upon exiting
     simulation.plot_fitness_curves()
+    try:
+        renderer.win_a.destroy()
+        renderer.win_b.destroy()
+    except Exception:
+        pass
     pygame.quit()
     sys.exit(0)
 
