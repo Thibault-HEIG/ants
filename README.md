@@ -50,26 +50,23 @@ No arbitrary fitness function drives generational resets — evolution is **cont
 
 ### The World
 
-The 1200×800 arena is divided into two zones:
+The 1000×900 arena is divided into two zones:
 
 | Zone | Location | Properties |
 |------|----------|------------|
-| **Danger Zone** (red tint) | Left half | Spiders move at ant speed here. Less food spawns (20%). |
-| **Safe Zone** (green tint) | Right half | Spiders move at normal speed. Most food spawns here (80%). |
-
-This asymmetry forces interesting strategic trade-offs: ants must venture into danger for territory and food, while spiders benefit from hunting in their fast zone.
+| **Ants' Zone** (green) | Left half | More food spawns (66%). |
+| **Spiders' Zone** (red) | Right half | Ants move slower here. Less food spawns (33%). |
 
 ### Species Comparison
 
 | Attribute | 🐜 Ant | 🕷️ Spider |
 |-----------|--------|-----------|
-| Population | 100 (cap: 300) | 5 (cap: 100) |
+| Population | cap: 300 | cap: 100 |
 | Initial Health | 100 HP | 300 HP |
-| Speed | 150 px/s | 80 px/s (150 in Danger Zone) |
+| Speed | 150 px/s | 80 px/s |
 | Damage | 50 | 80 |
 | Attack Cost | 20 HP/s | 30 HP/s |
-| Sensor Range | 150 px | 250 px |
-| Strategy | Swarm, outnumber | Tank, ambush |
+| Sensor Range | 100 px | 150 px |
 
 Combat uses **Reach vs Hurtbox** mechanics — damage is dealt when a creature actively decides to attack (`is_attacking == True` via its 3rd neural network output) and an enemy's collision hurtbox is within its strike reach. Because reach is larger than body radius, a creature can land a hit before the target is close enough to retaliate without taking any damage. Actively attacking drains stamina (20 HP/s for ants, 30 HP/s for spiders), forcing creatures to evolve disciplined timing rather than swinging blindly in empty space.
 
@@ -160,7 +157,7 @@ Counts of nearby allies and enemies within sensor range, normalised by a cap of 
 
 Creatures reproduce **during the simulation** based on fitness ranking and population pressure:
 
-- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` in `genetics.py`, which dynamically scales the parent pool). A mutated child is spawned near the parent.
+- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` in `genetics.py`, which dynamically scales the parent pool). A mutated child is spawned at the anthill or spider web.
 - **Dynamic Spawn Rate**: The time interval between spawns scales dynamically based on available population slots:
   `interval = THRESHOLD / (max_population - current_population)`
   
@@ -168,22 +165,22 @@ Creatures reproduce **during the simulation** based on fitness ranking and popul
 
 ### Mutation
 
-Every gene is mutated with Gaussian noise (mean=0, σ=0.5). There is no crossover — children are mutated clones of a single parent.
+Every gene is mutated with Gaussian noise (mean, σ). There is no crossover — children are mutated clones of a single parent.
 
-### Fitness Function
+### Fitness Function (to optimize)
 
 Used for ranking and parent selection. Fitness is calculated directly from raw performance metrics (survival time, food consumed, and combat engagements):
 
 ```python
 # Ants
-fitness = (survival_time / 20.0) * 10.0 + food_eaten * 30.0 + enemies_touched * 50.0
+fitness = survival_time + food_eaten + enemies_touched + times_eating_for_nothing + times_attacking_for_nothing + follow_pheromones + distance_walked
 
 # Spiders
-fitness = (survival_time / 20.0) * 10.0 + food_eaten * 10.0 + enemies_touched * 50.0
+fitness = survival_time + food_eaten + enemies_touched + times_eating_for_nothing + times_attacking_for_nothing + distance_walked
 ```
 
 > [!NOTE]
-> Historical maximum records (`SpeciesStats`) are tracked independently across the entire simulation run and displayed in real-time on the HUD.
+> Each parameter has an attributed weight which is often changed to try to optimize intelligence manually.
 
 ---
 
@@ -258,21 +255,6 @@ main.py / core.engine
 
 ---
 
-## Key Constants
-
-All tunable parameters are decoupled into logical modules:
-
-| Constant | Location | Impact |
-|----------|----------|--------|
-| `ACTIVE_SPECIES` | `core/simulation.py` | Defines active co-evolving species in the arena |
-| `MUTATION_STRENGTH` | `core/constants.py` | Higher = faster but noisier evolutionary jumps |
-| `HEALTH_DECAY_RATE` | `core/constants.py` | Forces creatures to forage; too high = die before learning |
-| `MAX_ANTS` / `MAX_SPIDERS` | `species/*_constants.py` | Population caps for dynamic spawn scaling |
-| `SENSOR_ANGLE` | `core/constants.py` | Narrower = more scanning needed, wider = fewer blind spots |
-| `NN_HIDDEN_1` / `NN_HIDDEN_2` | `core/constants.py` | Number of hidden neurons in each brain layer (16, 8) |
-
----
-
 ## Dependencies
 
 | Package | Version | Purpose |
@@ -281,15 +263,3 @@ All tunable parameters are decoupled into logical modules:
 | `pygame` | ≥2.0 | Rendering, input handling, game loop |
 
 No other dependencies. No ML frameworks.
-
----
-
-## Extending the Simulator
-
-Common extension points:
-
-- **New Species**: Create `species/beetle.py` inheriting from `Creature`, define its parameters in `beetle_constants.py`, add a sprite to `assets/beetle.png`, and add `Beetle` to `ACTIVE_SPECIES` in `core/simulation.py`.
-- **New Inputs**: Add fields to `SensorData` in `evolution/sensors.py`, update `to_array()`, and increment `NN_INPUTS` in `core/constants.py`. The brain auto-adapts.
-- **New Outputs**: Add an output by increasing `NN_OUTPUTS` in `core/constants.py` and updating post-processing in `evolution/brain.py`.
-- **Environmental Mechanics**: Implement custom weather, seasonal cycles, or obstacles inside `world/environment.py`.
-- **Headless Mode**: Instantiate `Simulation` without `Renderer` and call `step(dt)` in a script loop for high-speed evolutionary training.
