@@ -35,6 +35,8 @@ from species.ant_constants import (
     PHEROMONE_STRENGTH,
     FITNESS_FOLLOW_PHEROMONES_WEIGHT,
     FITNESS_DISTANCE_WALKED_WEIGHT,
+    FITNESS_TILES_COVERED_WEIGHT,
+    FITNESS_BRAIN_ORIGINALITY_WEIGHT,
 )
 
 
@@ -93,10 +95,13 @@ class Ant(Creature):
         if not self.alive or world is None or getattr(world, "pheromone_grid", None) is None:
             return
 
-        gw, gh = world.pheromone_grid.shape
-        cell_size = getattr(world, "pheromone_cell_size", 10.0)
-        cx = int(max(0.0, min(float(gw - 1), self.position[0] / cell_size)))
-        cy = int(max(0.0, min(float(gh - 1), self.position[1] / cell_size)))
+        if getattr(world, "tile_grid", None) is not None:
+            cx, cy = world.tile_grid.world_to_tile(self.position[0], self.position[1])
+        else:
+            gw, gh = world.pheromone_grid.shape
+            cell_size = getattr(world, "pheromone_cell_size", 10.0)
+            cx = int(max(0.0, min(float(gw - 1), self.position[0] / cell_size)))
+            cy = int(max(0.0, min(float(gh - 1), self.position[1] / cell_size)))
 
         if self._last_tile != (cx, cy):
             current_strength = float(world.pheromone_grid[cx, cy])
@@ -108,13 +113,15 @@ class Ant(Creature):
             self._last_tile_strength = float(world.pheromone_grid[cx, cy])
 
     def compute_fitness(self) -> float:
-        """Calculate this ant's fitness score using static weights from ant_constants."""
+        """Calculate this ant's fitness score using normalized metrics and brain originality."""
+        self.brain_originality = self.compute_brain_originality()
         return (
-            (self.survival_time / 20.0) * FITNESS_SURVIVAL_WEIGHT
-            + self.food_eaten * FITNESS_FOOD_WEIGHT
-            + self.enemies_touched * FITNESS_ENEMIES_TOUCHED_WEIGHT
-            + self.times_eating_for_nothing * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
-            + self.times_attacking_for_nothing * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
-            + self.follow_pheromones * FITNESS_FOLLOW_PHEROMONES_WEIGHT
-            + self.distance_walked * FITNESS_DISTANCE_WALKED_WEIGHT
+            self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
+            + self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
+            + self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
+            + self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
+            + self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
+            + self.normalize_metric("follow_pheromones") * FITNESS_FOLLOW_PHEROMONES_WEIGHT
+            + self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
+            + self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT
         )

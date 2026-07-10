@@ -212,12 +212,13 @@ class Renderer:
 
             for cls, alive_list in world.creatures.items():
                 species_name = getattr(cls, "species_name", cls.__name__)
-                for creature in alive_list:
-                    if not getattr(creature, "alive", False):
-                        continue
+                living = [c for c in alive_list if getattr(c, "alive", False)]
+                top_fit = set(sorted(living, key=lambda c: c.compute_fitness(), reverse=True)[:3]) if living else set()
+                for creature in living:
                     if self.show_sensors:
                         self._draw_sensors(creature)
-                    self._draw_creature(creature, species_name, is_dead=False)
+                    is_top = creature in top_fit
+                    self._draw_creature(creature, species_name, is_dead=False, is_top_fit=is_top)
 
         # Draw small FPS box top-right in Window A
         draw_fps_box(self.surface_a, self.font, self.clock.get_fps(), self.width, ultra_mode=ultra_mode)
@@ -242,7 +243,7 @@ class Renderer:
         else:
             self.clock.tick(60)
 
-    def _draw_creature(self, creature: Any, species_name: str, is_dead: bool) -> None:
+    def _draw_creature(self, creature: Any, species_name: str, is_dead: bool, is_top_fit: bool = False) -> None:
         cx, cy = int(creature.position[0]), int(creature.position[1])
         angle_deg = -math.degrees(creature.direction) - 90.0
 
@@ -275,6 +276,8 @@ class Renderer:
             pygame.draw.line(self.surface_a, (255, 255, 255), (cx, cy), (hx, hy), 2)
 
         if not is_dead:
+            if is_top_fit:
+                pygame.draw.circle(self.surface_a, (144, 238, 144), (cx, cy), int(creature.radius + 6), 2)
             draw_health_bar(self.surface_a, float(cx), float(cy), creature.radius, creature.health, creature.max_health)
 
     def _draw_sensors(self, creature: Any) -> None:

@@ -300,8 +300,8 @@ class LiveFitnessChart:
             self._draw_segment(self.history[i - 1], self.history[i])
 
     def update(self, round_time: float, ant_best: float, ant_avg: float, spider_best: float, spider_avg: float) -> None:
-        """Record point every 30 seconds of simulation time and incrementally update persistent surface."""
-        if self.last_update_time < 0 or (round_time - self.last_update_time) >= 30.0:
+        """Record point every 10 seconds of simulation time and incrementally update persistent surface."""
+        if self.last_update_time < 0 or (round_time - self.last_update_time) >= 10.0:
             point = (round_time, ant_best, ant_avg, spider_best, spider_avg)
             self.history.append(point)
             self.last_update_time = round_time
@@ -359,7 +359,7 @@ def draw_window_b_panel(
 
     top_lines: list[tuple[str, tuple[int, int, int]]] = [
         ("=== ECOSYSTEM STATS & EVOLUTION MONITOR ===", (0, 220, 230)),
-        (f"Time: {world.round_time:.1f}s | Speed: {sim_speed}x | Ultra Mode [T]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
+        (f"Time: {world.round_time:.1f}s | Speed: {sim_speed}x | Ultra Mode [U]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
         (f"[ANT STATS]      Alive: {ant_m['alive']}/{ant_m['max_pop']} (Dead: {ant_m['dead']})", HUD_ACCENT_COLOR),
         (f"  Fitness        Best: {ant_m['best_fitness']:6.1f} | Avg: {ant_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
@@ -373,8 +373,8 @@ def draw_window_b_panel(
         (f"  Enemies Touch  Best: {spider_m['best_enemies']:6d} | Avg: {spider_m['avg_enemies']:6.1f}", HUD_TEXT_COLOR),
         (f"  Lifetime       Best: {spider_m['best_lifetime']:6.1f}s| Avg: {spider_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
-        ("[KEYS] [T] Ultra Mode  [SPACE] Pause  [R] Reset  [P] Save", (210, 215, 225)),
-        ("       [S] Sensors     [F/C] Plot     [1-8] Spd  [W] WinB", (210, 215, 225)),
+        ("[KEYS] [U] Ultra Mode  [SPACE] Pause  [R] Reset  [P] Save", (210, 215, 225)),
+        ("       [S] Sensors     [F] Plot     [1-8] Spd  [W] WinB", (210, 215, 225)),
     ]
 
     _draw_floating_box(surface, _stats_font, top_lines, pos_x=14, pos_y=12, align_right=False, border_color=(0, 173, 181, 180))

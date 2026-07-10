@@ -24,7 +24,7 @@ python3 -m core.engine
 | `Space` | Pause / unpause |
 | `S` | Toggle vision ray / sensor visualization |
 | `R` | Restart simulation |
-| `T` | Activate ultra performance mode (no rendering) |
+| `U` | Activate ultra performance mode (no rendering) |
 | `P` | Save top brains in a JSON file |
 | `F` | Print the fitness curve in the terminal |
 | `Escape` | Quit |

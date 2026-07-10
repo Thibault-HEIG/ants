@@ -28,6 +28,7 @@ from world.kingdom import Kingdom
 from world.obstacle import Lake
 from world.physics import SpatialHash, resolve_combat, resolve_food_collisions, resolve_lake_collisions
 from world.environment import EnvironmentSystem
+from world.grid import TileGrid
 
 
 class World:
@@ -80,11 +81,10 @@ class World:
             Lake(np.array([820.0, 560.0]), radius=50.0),
         ]
 
-        # Phase 4: Pheromones (10x10 tiles)
-        self.pheromone_cell_size: float = 10.0
-        gw = int(self.width / self.pheromone_cell_size)
-        gh = int(self.height / self.pheromone_cell_size)
-        self.pheromone_grid: np.ndarray = np.zeros((gw, gh), dtype=float)
+        # Phase 4: Spatial Tile Grid & Pheromones (10x10 tiles)
+        self.tile_grid: TileGrid = TileGrid(float(self.width), float(self.height), cell_size=10.0)
+        self.pheromone_cell_size: float = self.tile_grid.cell_size
+        self.pheromone_grid: np.ndarray = self.tile_grid.create_float_grid()
 
         # Populate initial world state
         for cls in self.active_species:
@@ -249,6 +249,7 @@ class World:
                         child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
                     child = cls(child_pos, self.rng)
                     child.genome = mutate(parent.genome, self.rng)
+                    child.world = self
                     self.creatures[cls].append(child)
             else:
                 self.repro_timers[cls] = 0.0
@@ -272,6 +273,7 @@ class World:
             else:
                 pos = self.rng.uniform([50, 50], [self.width - 50, self.height - 50])
             creature = cls(pos, self.rng)
+            creature.world = self
             if genomes is not None and len(genomes) > 0:
                 if i < len(genomes):
                     creature.genome = genomes[i]

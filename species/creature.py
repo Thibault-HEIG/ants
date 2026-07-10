@@ -112,6 +112,9 @@ class Creature(ABC):
         self.times_eating_for_nothing: int = 0
         self.times_attacking_for_nothing: int = 0
         self.follow_pheromones: float = 0.0
+        self.brain_originality: float = 0.0
+        self.world: Any | None = None
+        self.visited_tiles: set[tuple[int, int]] = set()
         self._last_tile: tuple[int, int] | None = None
         self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
@@ -120,10 +123,28 @@ class Creature(ABC):
         self.is_eating: bool = False
         self.eat_timer: float = 0.0
 
-        # --- HP gain tracking ("has gained HP in the last second") ---
         self._hp_snapshot: float = self.health
         self._hp_timer: float = 0.0
         self._has_gained_hp: bool = False
+        self.record_current_tile()
+
+    def record_current_tile(self, world_obj: Any | None = None) -> None:
+        """Record the current tile position into visited_tiles using the spatial tile grid."""
+        if world_obj is None:
+            world_obj = getattr(self, "world", None)
+        if world_obj is not None and getattr(world_obj, "tile_grid", None) is not None:
+            tile = world_obj.tile_grid.world_to_tile(self.position[0], self.position[1])
+        else:
+            cell_size = getattr(world_obj, "pheromone_cell_size", 10.0) if world_obj else 10.0
+            gx = int(max(0.0, float(self.position[0]) / cell_size))
+            gy = int(max(0.0, float(self.position[1]) / cell_size))
+            tile = (gx, gy)
+        self.visited_tiles.add(tile)
+
+    @property
+    def tiles_covered(self) -> int:
+        """Number of unique tiles covered by the individual using the spatial tile grid."""
+        return len(self.visited_tiles)
 
     @property
     def hunger(self) -> float:
@@ -152,6 +173,8 @@ class Creature(ABC):
         """
         if not self.alive:
             return
+        if world is not None:
+            self.world = world
 
         # --- HP gain tracking (rolling 1-second window) ---
         self._hp_timer += dt
@@ -221,6 +244,8 @@ class Creature(ABC):
             self.health -= self._attack_cost * dt
         self.survival_time += dt
 
+        self.record_current_tile()
+
         SpeciesStats.update(self.species_name, float(self.survival_time), int(self.food_eaten), int(self.enemies_touched))
 
         if self.health <= 0:
@@ -243,17 +268,51 @@ class Creature(ABC):
             self.health = 0.0
             self.alive = False
 
-    # ------------------------------------------------------------------
-    # Future-Proofing Hooks: Inter-Species Communication Stubs
-    # ------------------------------------------------------------------
+    def _get_alive_conspecifics(self) -> list[Creature]:
+        """Return the list of currently living creatures of the same species."""
+        world = getattr(self, "world", None)
+        if world is not None and hasattr(world, "creatures"):
+            living = [c for c in world.creatures.get(type(self), []) if getattr(c, "alive", False)]
+            if living:
+                return living
+            all_known = world.creatures.get(type(self), []) + world.dead_creatures.get(type(self), [])
+            if all_known:
+                return all_known
+        return [self]
 
-    def emit_signal(self, channel: int, intensity: float) -> None:
-        """Stub for inter-species communication: broadcast a chemical or vocal signal."""
-        pass
+    def normalize_metric(self, metric_name: str) -> float:
+        """Map self's metric_name value between 0 and 1 where 1 = current max alive and 0 = current min alive."""
+        value = float(getattr(self, metric_name, 0.0))
+        alive_pool = self._get_alive_conspecifics()
+        if not alive_pool:
+            return 1.0 if value > 0 else 0.0
 
-    def receive_signal(self, channel: int, intensity: float, source_direction: float) -> None:
-        """Stub for inter-species communication: process an incoming signal from another entity."""
-        pass
+        vals = [float(getattr(c, metric_name, 0.0)) for c in alive_pool]
+        min_val = min(vals)
+        max_val = max(vals)
+        if max_val > min_val:
+            return float((value - min_val) / (max_val - min_val))
+        return 1.0 if value > 0 else 0.0
+
+    def compute_brain_originality(self) -> float:
+        """Calculate originality of this creature's brain relative to the living population mean.
+
+        Returns a value in [0, 1] using a sigmoid mapping of the Euclidean norm
+        magnitude distance between this creature's genome and the population mean genome.
+        """
+        alive_pool = self._get_alive_conspecifics()
+        if len(alive_pool) <= 1:
+            return 0.0
+
+        genomes = [c.brain.get_genome() for c in alive_pool]
+        mean_genome = np.mean(genomes, axis=0)
+        my_genome = self.brain.get_genome()
+
+        diff = my_genome - mean_genome
+        dist = float(np.linalg.norm(diff))
+        scaled_dist = dist / math.sqrt(len(diff)) if len(diff) > 0 else dist
+
+        return float(2.0 / (1.0 + math.exp(-scaled_dist)) - 1.0)
 
     @abstractmethod
     def compute_fitness(self) -> float:
@@ -265,5 +324,5 @@ class Creature(ABC):
         eating = " [EATING]" if self.is_eating else ""
         return (
             f"{self.__class__.__name__}({status}{eating}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
-            f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched}, dist={self.distance_walked:.0f})"
+            f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched}, tiles={self.tiles_covered})"
         )

@@ -57,7 +57,7 @@ def main() -> None:
                     break
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
-                elif event.key == pygame.K_t:
+                elif event.key == pygame.K_u:
                     simulation.ultra_mode = not getattr(simulation, "ultra_mode", False)
                 elif event.key == pygame.K_w or event.key == pygame.K_b:
                     renderer.toggle_window_b()
@@ -70,7 +70,7 @@ def main() -> None:
                     simulation.save_top_brains()
                 elif event.key == pygame.K_s:
                     renderer.toggle_sensors()
-                elif event.key == pygame.K_f or event.key == pygame.K_c:
+                elif event.key == pygame.K_f:
                     # Print terminal fitness curves immediately
                     simulation.plot_fitness_curves()
                 elif pygame.K_1 <= event.key <= pygame.K_8:

@@ -32,6 +32,8 @@ from species.spider_constants import (
     FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT,
     FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT,
     FITNESS_DISTANCE_WALKED_WEIGHT,
+    FITNESS_TILES_COVERED_WEIGHT,
+    FITNESS_BRAIN_ORIGINALITY_WEIGHT,
 )
 
 
@@ -83,12 +85,14 @@ class Spider(Creature):
         return self._max_speed
 
     def compute_fitness(self) -> float:
-        """Calculate this spider's fitness score using static weights from spider_constants."""
+        """Calculate this spider's fitness score using normalized metrics and brain originality."""
+        self.brain_originality = self.compute_brain_originality()
         return (
-            (self.survival_time / 20.0) * FITNESS_SURVIVAL_WEIGHT
-            + self.food_eaten * FITNESS_FOOD_WEIGHT
-            + self.enemies_touched * FITNESS_ENEMIES_TOUCHED_WEIGHT
-            + self.times_eating_for_nothing * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
-            + self.times_attacking_for_nothing * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
-            + self.distance_walked * FITNESS_DISTANCE_WALKED_WEIGHT
+            self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
+            + self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
+            + self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
+            + self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
+            + self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
+            + self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
+            + self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT
         )
