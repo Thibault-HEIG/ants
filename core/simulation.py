@@ -22,7 +22,7 @@ from world.world import World
 # Core ACTIVE_SPECIES Configuration
 # Modify this list for seamless isolation testing (e.g. ACTIVE_SPECIES = [Ant])
 # ---------------------------------------------------------------------------
-ACTIVE_SPECIES: list[type] = [Ant, Spider]
+ACTIVE_SPECIES: list[type] = [Spider]
 
 
 class Simulation:

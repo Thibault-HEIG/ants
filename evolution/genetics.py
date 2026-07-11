@@ -65,13 +65,15 @@ def create_offspring_batch(
         return [Brain(rng).get_genome() for _ in range(population_size)]
 
     children: list[np.ndarray] = []
-    children_per_parent = population_size // len(parents)
-    remainder = population_size % len(parents)
+    best_parent = parents[0]
 
-    for i, parent in enumerate(parents):
-        count = children_per_parent + (1 if i < remainder else 0)
-        for _ in range(count):
+    for i in range(population_size):
+        if i % 2 == 0:
+            parent = best_parent
+            child_genome = parent.genome.copy()  # Direct copy of the best parent
+        else:
+            parent = parents[int(rng.integers(len(parents)))]
             child_genome = mutate(parent.genome, rng)
-            children.append(child_genome)
+        children.append(child_genome)
 
     return children

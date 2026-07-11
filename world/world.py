@@ -62,6 +62,7 @@ class World:
         self.creatures: dict[type, list[Any]] = {cls: [] for cls in self.active_species}
         self.dead_creatures: dict[type, list[Any]] = {cls: [] for cls in self.active_species}
         self.repro_timers: dict[type, float] = {cls: 0.0 for cls in self.active_species}
+        self._parent_alternate_state: dict[type, bool] = {cls: False for cls in self.active_species}
 
         self.food_items: list[Food] = []
         self.spatial_hash: SpatialHash = SpatialHash(cell_size=100.0)
@@ -240,7 +241,7 @@ class World:
                 self.repro_timers[cls] += dt * available
                 while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
                     self.repro_timers[cls] -= threshold
-                    parent = self._select_parent(self.creatures[cls])
+                    parent = self._select_parent(self.creatures[cls], cls)
                     kingdom = self.kingdoms.get(cls)
                     if kingdom is not None:
                         child_pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
@@ -254,10 +255,22 @@ class World:
             else:
                 self.repro_timers[cls] = 0.0
 
-    def _select_parent(self, creatures: list[Any]) -> Any:
-        """Select a parent using truncation selection."""
-        parents = select_parents(creatures)
-        return parents[int(self.rng.integers(len(parents)))]
+    def _select_parent(self, creatures: list[Any], cls: type | None = None) -> Any:
+        """Select a parent alternating 1/2 best individual, 1/2 random from top 20% best parents."""
+        if not creatures:
+            return None
+
+        scored = sorted(creatures, key=lambda c: c.compute_fitness(), reverse=True)
+        use_best = not self._parent_alternate_state.get(cls, False)
+        if cls is not None:
+            self._parent_alternate_state[cls] = use_best
+
+        if use_best:
+            return scored[0]
+
+        top_20_count = max(1, int(len(scored) * 0.20))
+        top_pool = scored[:top_20_count]
+        return top_pool[int(self.rng.integers(len(top_pool)))]
 
     def _spawn_species(self, cls: type, genomes: list[np.ndarray] | None = None) -> None:
         """Spawn initial population for a given species class."""

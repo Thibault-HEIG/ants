@@ -37,7 +37,7 @@ MAX_FOOD: int = 150                    # global cap on food items
 # ---------------------------------------------------------------------------
 FOOD_SOURCE_RADIUS: float = 20.0           # visual/collision radius of the source spot
 FOOD_SOURCE_LIFETIME: float = 180.0        # 3 minutes before a source expires
-FOOD_SOURCE_SPAWN_RATE: float = 1.5        # food items generated per second per source
+FOOD_SOURCE_SPAWN_RATE: float = 0.5        # food items generated per second per source
 FOOD_SOURCE_SPAWN_RADIUS: float = 80.0     # scatter radius around the source
 MAX_FOOD_SOURCES: int = 5                  # max simultaneous active sources
 FOOD_SOURCE_COOLDOWN: float = 30.0         # seconds between new source spawns
@@ -72,9 +72,9 @@ GENOME_SIZE: int = (
 # ---------------------------------------------------------------------------
 # Genetic algorithm
 # ---------------------------------------------------------------------------
-MUTATION_RATE: float = 0.1            # probability each gene is mutated
-MUTATION_STRENGTH: float = 0.8        # std-dev of Gaussian noise added to genes
-SELECTION_FRACTION: float = 0.2       # top % survive to breed
+MUTATION_RATE: float = 0.05            # probability each gene is mutated
+MUTATION_STRENGTH: float = 0.15        # std-dev of Gaussian noise added to genes
+SELECTION_FRACTION: float = 0.1       # top % survive to breed
 
 # ---------------------------------------------------------------------------
 # Rendering / UI
@@ -97,4 +97,4 @@ SPEED_MULTIPLIERS: list[float] = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256]
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
-RANDOM_SEED: int = 41
+RANDOM_SEED: int = 42

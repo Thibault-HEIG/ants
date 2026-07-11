@@ -109,7 +109,7 @@ Each sensor outputs 8 values:
 | # | Input | Range | Category |
 |---|-------|-------|----------|
 | 64 | `hp` | [0, 1] | 🧠 Internal |
-| 65 | `zone` | {0, 1} | 🧠 Internal (0 = Danger, 1 = Safe) |
+| 65 | `zone` | {0, 1} | 🧠 Internal (0 = Spider, 1 = Ant) |
 | 66 | `speed` | [0, 1] | 🧠 Internal |
 | 67 | `age` | [0, 1] | 🧠 Internal |
 | 68 | `ally_density` | [0, 1] | 🐜 Teamwork |
@@ -127,7 +127,7 @@ Each sensor outputs 8 values:
 
 ### Genome
 
-The genome is a flat vector of **1324 floats** — every weight and bias concatenated:
+The genome is a flat vector of **1468 floats** — every weight and bias concatenated:
 
 ```
 [w_input→hidden1 (1136)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (32)] [b_output (4)]
@@ -157,7 +157,7 @@ Counts of nearby allies and enemies within sensor range, normalised by a cap of 
 
 Creatures reproduce **during the simulation** based on fitness ranking and population pressure:
 
-- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` in `genetics.py`, which dynamically scales the parent pool). A mutated child is spawned at the anthill or spider web.
+- **Truncation Selection**: Whenever a species reproduces, the world selects a random parent from the **top N% fittest** living creatures of that species (using `select_parents` in `genetics.py`, which dynamically scales the parent pool). A mutated child is spawned at the anthill or spider web. Half of the time the best current specie is simply cloned.
 - **Dynamic Spawn Rate**: The time interval between spawns scales dynamically based on available population slots:
   `interval = THRESHOLD / (max_population - current_population)`
   

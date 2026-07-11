@@ -120,7 +120,7 @@ class Brain:
     # ------------------------------------------------------------------
 
     def get_genome(self) -> np.ndarray:
-        """Flatten all weights and biases into a single 1-D vector (size 1324)."""
+        """Flatten all weights and biases into a single 1-D vector (size 1468)."""
         return np.concatenate([
             self.weights_input_hidden1.flatten(),
             self.bias_hidden1.flatten(),
