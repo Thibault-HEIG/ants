@@ -58,6 +58,7 @@ class Creature(ABC):
     """
 
     species_name: str = "Creature"
+    npc: bool = False
     initial_health: float = 100.0
     max_speed: float = 100.0
     radius: float = 10.0

@@ -45,7 +45,7 @@ class World:
     def __init__(
         self,
         rng: np.random.Generator,
-        active_species: list[type] | None = None,
+        active_species: dict[type, bool] | list[type] | None = None,
     ) -> None:
         SpeciesStats.reset()
         self.width: int = WORLD_WIDTH
@@ -54,9 +54,21 @@ class World:
 
         if active_species is None:
             from core.simulation import ACTIVE_SPECIES
-            self.active_species: list[type] = list(ACTIVE_SPECIES)
+            cfg = ACTIVE_SPECIES
         else:
-            self.active_species: list[type] = list(active_species)
+            cfg = active_species
+
+        if isinstance(cfg, dict):
+            self.active_species: list[type] = list(cfg.keys())
+            self.npc_species: dict[type, bool] = dict(cfg)
+        else:
+            self.active_species: list[type] = list(cfg)
+            self.npc_species: dict[type, bool] = {
+                cls: getattr(cls, "npc", False) for cls in self.active_species
+            }
+
+        for cls in self.active_species:
+            cls.npc = self.is_npc(cls)
 
         # Dynamic containers keyed by species class
         self.creatures: dict[type, list[Any]] = {cls: [] for cls in self.active_species}
@@ -93,6 +105,10 @@ class World:
 
         # Kick-start with an initial food source so creatures have something to eat
         self.environment.source_cooldown = 0.0  # allow immediate first source
+
+    def is_npc(self, cls: type) -> bool:
+        """Return True if species cls is configured as an NPC (does not evolve)."""
+        return bool(self.npc_species.get(cls, getattr(cls, "npc", False)))
 
     # ------------------------------------------------------------------
     # Convenience accessors
@@ -231,7 +247,9 @@ class World:
                 init_count = getattr(cls, "initial_count", 10)
                 if dead_pool:
                     from evolution.genetics import create_offspring_batch
-                    new_genomes = create_offspring_batch(dead_pool, init_count, self.rng)
+                    new_genomes = create_offspring_batch(
+                        dead_pool, init_count, self.rng, npc=self.is_npc(cls)
+                    )
                     self._spawn_species(cls, new_genomes)
                     self.dead_creatures[cls].clear()
                 else:
@@ -249,7 +267,10 @@ class World:
                         offset = self.rng.uniform(-5.0, 5.0, size=2)
                         child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
                     child = cls(child_pos, self.rng)
-                    child.genome = mutate(parent.genome, self.rng)
+                    if self.is_npc(cls):
+                        child.genome = parent.genome.copy()
+                    else:
+                        child.genome = mutate(parent.genome, self.rng)
                     child.world = self
                     self.creatures[cls].append(child)
             else:
@@ -292,7 +313,10 @@ class World:
                     creature.genome = genomes[i]
                 else:
                     parent_genome = genomes[i % len(genomes)]
-                    creature.genome = mutate(parent_genome, self.rng)
+                    if self.is_npc(cls):
+                        creature.genome = parent_genome.copy()
+                    else:
+                        creature.genome = mutate(parent_genome, self.rng)
             self.creatures[cls].append(creature)
 
     def reset_with_genomes(

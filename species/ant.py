@@ -51,6 +51,7 @@ class Ant(Creature):
     """
 
     species_name: str = "Ant"
+    npc: bool = False
     initial_health: float = ANT_INITIAL_HEALTH
     max_speed: float = ANT_MAX_SPEED
     radius: float = float(ANT_RADIUS)

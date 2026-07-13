@@ -48,6 +48,7 @@ class Spider(Creature):
     """
 
     species_name: str = "Spider"
+    npc: bool = False
     initial_health: float = SPIDER_INITIAL_HEALTH
     max_speed: float = SPIDER_MAX_SPEED
     radius: float = float(SPIDER_RADIUS)

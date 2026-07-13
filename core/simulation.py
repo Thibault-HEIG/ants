@@ -20,9 +20,17 @@ from world.world import World
 
 # ---------------------------------------------------------------------------
 # Core ACTIVE_SPECIES Configuration
-# Modify this list for seamless isolation testing (e.g. ACTIVE_SPECIES = [Ant])
+# Linked dictionary mapping each active species class to its boolean "npc" flag.
+# If True (NPC), the species does not evolve and keeps its brain across generations.
+# {
+#    Ant: False,
+#    Spider: False,
+# }
 # ---------------------------------------------------------------------------
-ACTIVE_SPECIES: list[type] = [Spider]
+ACTIVE_SPECIES: dict[type, bool] = {
+    Ant: False,
+    Spider: True
+}
 
 
 class Simulation:
@@ -32,20 +40,32 @@ class Simulation:
     ----------
     rng : np.random.Generator or None
         Seeded random number generator.
-    active_species : list[type] or None
-        List of species classes to simulate. Defaults to ACTIVE_SPECIES.
+    active_species : dict[type, bool] or list[type] or None
+        Species configuration linking species classes to their npc boolean flag.
+        Defaults to ACTIVE_SPECIES.
     """
 
     def __init__(
         self,
         rng: np.random.Generator | None = None,
-        active_species: list[type] | None = None,
+        active_species: dict[type, bool] | list[type] | None = None,
         load_path: str | None = None,
     ) -> None:
         self.rng: np.random.Generator = rng if rng is not None else np.random.default_rng(RANDOM_SEED)
-        self.active_species: list[type] = list(active_species if active_species is not None else ACTIVE_SPECIES)
+        cfg = active_species if active_species is not None else ACTIVE_SPECIES
+        if isinstance(cfg, dict):
+            self.active_species: list[type] = list(cfg.keys())
+            self.npc_species: dict[type, bool] = dict(cfg)
+        else:
+            self.active_species: list[type] = list(cfg)
+            self.npc_species: dict[type, bool] = {
+                cls: getattr(cls, "npc", False) for cls in self.active_species
+            }
 
-        self.world: World = World(self.rng, active_species=self.active_species)
+        for cls in self.active_species:
+            cls.npc = self.is_npc(cls)
+
+        self.world: World = World(self.rng, active_species=cfg)
         self.running: bool = True
         self.ultra_mode: bool = False
         self.ticks_since_render: int = 0
@@ -67,6 +87,10 @@ class Simulation:
 
         if load_path is not None:
             self.load_from_save(load_path)
+
+    def is_npc(self, cls: type) -> bool:
+        """Return True if species cls is configured as an NPC (non-evolving)."""
+        return bool(self.npc_species.get(cls, getattr(cls, "npc", False)))
 
     def save_top_brains(self) -> str | None:
         """Save top 10% brains of each active species to a JSON file in saves/ directory."""

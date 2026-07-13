@@ -56,8 +56,9 @@ def create_offspring_batch(
     creatures: list[Creature],
     population_size: int,
     rng: np.random.Generator,
+    npc: bool = False,
 ) -> list[np.ndarray]:
-    """Produce mutated genomes for a population batch from top performing ancestors."""
+    """Produce genomes for a population batch from top performing ancestors (unmutated if npc is True)."""
     parents = select_parents(creatures)
 
     if not parents:
@@ -73,7 +74,7 @@ def create_offspring_batch(
             child_genome = parent.genome.copy()  # Direct copy of the best parent
         else:
             parent = parents[int(rng.integers(len(parents)))]
-            child_genome = mutate(parent.genome, rng)
+            child_genome = parent.genome.copy() if npc else mutate(parent.genome, rng)
         children.append(child_genome)
 
     return children
