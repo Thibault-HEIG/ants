@@ -246,6 +246,8 @@ class World:
         # Phase 5: Cleanup dead entities
         for cls in list(self.creatures.keys()):
             newly_dead = [c for c in self.creatures[cls] if not getattr(c, "alive", False)]
+            for c in newly_dead:
+                SpeciesStats.record_dead_creature(c)
             self.dead_creatures[cls].extend(newly_dead)
             # Cap dead pool for continuous species only (generational clears each gen)
             if self._get_repro_mode(cls) == "continuous" and len(self.dead_creatures[cls]) > 100:
@@ -355,6 +357,8 @@ class World:
                                           mutation_strength=GENERATIONAL_MUTATION_STRENGTH))
 
         # Respawn full population as fresh creatures at kingdom
+        for c in self.creatures.get(cls, []):
+            SpeciesStats.record_dead_creature(c)
         self.creatures[cls] = []
         for i, genome in enumerate(genomes):
             if kingdom is not None:
@@ -434,6 +438,8 @@ class World:
         """Spawn initial population for a given species class."""
         target_count = getattr(cls, "initial_count", 10)
         count = max(len(genomes), target_count) if genomes is not None and len(genomes) > 0 else target_count
+        for c in self.creatures.get(cls, []):
+            SpeciesStats.record_dead_creature(c)
         self.creatures[cls] = []
         self.dead_creatures[cls] = []
 

@@ -57,10 +57,10 @@ def _draw_floating_box(
     pos_y: int,
     align_right: bool = False,
     border_color: tuple[int, int, int, int] = (80, 95, 115, 150),
-) -> None:
+) -> pygame.Rect:
     """Draw a semi-transparent floating UI box with vertical text lines."""
     if not lines:
-        return
+        return pygame.Rect(pos_x, pos_y, 0, 0)
 
     rendered_imgs = [font.render(text, True, color) for text, color in lines]
     padding_x = 14
@@ -85,7 +85,9 @@ def _draw_floating_box(
         box_surf.blit(img, (padding_x, current_y))
         current_y += img.get_height() + line_spacing
 
-    surface.blit(box_surf, (actual_x, pos_y))
+    rect = pygame.Rect(actual_x, pos_y, box_w, box_h)
+    surface.blit(box_surf, rect.topleft)
+    return rect
 
 
 def draw_hud_panel(
@@ -145,6 +147,30 @@ def draw_hud_panel(
     _draw_floating_box(surface, font, right_lines, pos_x=width - 15, pos_y=15, align_right=True, border_color=(255, 180, 60, 150))
 
 
+def draw_commands_box(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    pos_x: int | None = None,
+    pos_y: int = 12,
+    align_right: bool = True,
+) -> pygame.Rect:
+    """Draw commands (keys) one per row in the empty space top right of Window B using a smaller font."""
+    if pos_x is None:
+        pos_x = surface.get_width() - 14
+    lines: list[tuple[str, tuple[int, int, int]]] = [
+        ("COMMANDS (KEYS)", (0, 220, 230)),
+        ("[SPACE] Pause / Resume", (210, 215, 225)),
+        ("[U]     Toggle Ultra Mode", (210, 215, 225)),
+        ("[S]     Toggle Sensors", (210, 215, 225)),
+        ("[W]     Toggle Stats Panel", (210, 215, 225)),
+        ("[F]     Plot Curves (Term)", (210, 215, 225)),
+        ("[P]     Save Snapshot", (210, 215, 225)),
+        ("[1-8]   Speed Multiplier", (210, 215, 225)),
+        ("[ESC]   Exit Simulation", (210, 215, 225)),
+    ]
+    return _draw_floating_box(surface, font, lines, pos_x=pos_x, pos_y=pos_y, align_right=align_right, border_color=(0, 173, 181, 150))
+
+
 def draw_fps_box(surface: pygame.Surface, font: pygame.font.Font, fps: float, width: int, ultra_mode: bool = False) -> None:
     """Draw a small FPS box in the top right of Window A."""
     mode_str = "ULTRA" if ultra_mode else "NORMAL"
@@ -156,7 +182,8 @@ def draw_fps_box(surface: pygame.Surface, font: pygame.font.Font, fps: float, wi
 
 
 def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
-    """Compute living/dead population and best/average vitals & fitness for a species."""
+    """Compute living/dead population and all-time best/average vitals & fitness for a species."""
+    species_name = getattr(cls, "species_name", cls.__name__)
     living = world.creatures.get(cls, [])
     dead = world.dead_creatures.get(cls, [])
     max_pop = getattr(cls, "max_population", 100)
@@ -165,28 +192,25 @@ def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
     all_time_count = getattr(world, "all_time_counts", {}).get(cls, alive_count + dead_count)
     all_creatures = living + dead
 
-    if all_creatures:
-        best_fitness = max(c.compute_fitness() for c in all_creatures)
-        best_food = max(getattr(c, "food_eaten", 0) for c in all_creatures)
-        best_computed_food = max(getattr(c, "computed_food_eaten", 0.0) for c in all_creatures)
-        best_enemies = max(getattr(c, "enemies_touched", 0) for c in all_creatures)
-        best_computed_enemies = max(getattr(c, "computed_enemies_touched", 0.0) for c in all_creatures)
-        best_lifetime = max(getattr(c, "survival_time", 0.0) for c in all_creatures)
-    else:
-        best_fitness = 0.0
-        best_food = 0
-        best_computed_food = 0.0
-        best_enemies = 0
-        best_computed_enemies = 0.0
-        best_lifetime = 0.0
+    # All-time best scores combining historical SpeciesStats records + currently living max
+    best_fitness = max(SpeciesStats.max_fitness.get(species_name, 0.0), max((c.compute_fitness() for c in living), default=0.0))
+    best_food = max(SpeciesStats.max_foodeaten.get(species_name, 0), max((getattr(c, "food_eaten", 0) for c in living), default=0))
+    best_computed_food = max(SpeciesStats.max_computed_food.get(species_name, 0.0), max((getattr(c, "computed_food_eaten", 0.0) for c in living), default=0.0))
+    best_enemies = max(SpeciesStats.max_enemies_touched.get(species_name, 0), max((getattr(c, "enemies_touched", 0) for c in living), default=0))
+    best_computed_enemies = max(SpeciesStats.max_computed_enemies.get(species_name, 0.0), max((getattr(c, "computed_enemies_touched", 0.0) for c in living), default=0.0))
+    best_lifetime = max(SpeciesStats.max_lifetime.get(species_name, 0.0), max((getattr(c, "survival_time", 0.0) for c in living), default=0.0))
 
-    if living:
-        avg_fitness = sum(c.compute_fitness() for c in living) / len(living)
-        avg_food = sum(getattr(c, "food_eaten", 0) for c in living) / len(living)
-        avg_computed_food = sum(getattr(c, "computed_food_eaten", 0.0) for c in living) / len(living)
-        avg_enemies = sum(getattr(c, "enemies_touched", 0) for c in living) / len(living)
-        avg_computed_enemies = sum(getattr(c, "computed_enemies_touched", 0.0) for c in living) / len(living)
-        avg_lifetime = sum(getattr(c, "survival_time", 0.0) for c in living) / len(living)
+    # All-time average scores combining dead accumulators + currently living
+    total_dead_count = SpeciesStats.total_dead_count.get(species_name, 0)
+    total_count = total_dead_count + len(living)
+
+    if total_count > 0:
+        avg_fitness = (SpeciesStats.sum_dead_fitness.get(species_name, 0.0) + sum(c.compute_fitness() for c in living)) / total_count
+        avg_food = (SpeciesStats.sum_dead_food.get(species_name, 0.0) + sum(getattr(c, "food_eaten", 0) for c in living)) / total_count
+        avg_computed_food = (SpeciesStats.sum_dead_computed_food.get(species_name, 0.0) + sum(getattr(c, "computed_food_eaten", 0.0) for c in living)) / total_count
+        avg_enemies = (SpeciesStats.sum_dead_enemies.get(species_name, 0.0) + sum(getattr(c, "enemies_touched", 0) for c in living)) / total_count
+        avg_computed_enemies = (SpeciesStats.sum_dead_computed_enemies.get(species_name, 0.0) + sum(getattr(c, "computed_enemies_touched", 0.0) for c in living)) / total_count
+        avg_lifetime = (SpeciesStats.sum_dead_lifetime.get(species_name, 0.0) + sum(getattr(c, "survival_time", 0.0) for c in living)) / total_count
     elif all_creatures:
         avg_fitness = sum(c.compute_fitness() for c in all_creatures) / len(all_creatures)
         avg_food = sum(getattr(c, "food_eaten", 0) for c in all_creatures) / len(all_creatures)
@@ -202,7 +226,6 @@ def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
         avg_computed_enemies = 0.0
         avg_lifetime = 0.0
 
-    species_name = getattr(cls, "species_name", cls.__name__)
     bounds_table = getattr(cls, "metrics", {})
     metric_bounds: dict[str, tuple[float, float]] = {}
     peak_table = SpeciesStats.max_metrics.get(species_name, {})
@@ -262,6 +285,17 @@ class LiveFitnessChart:
         self.max_fitness = 100.0
         self._init_surface()
 
+    def resize(self, width: int, height: int) -> None:
+        """Resize chart surface and recompute layout margins."""
+        if width == self.width and height == self.height:
+            return
+        self.width = width
+        self.height = height
+        self.surface = pygame.Surface((width, height))
+        self.plot_w = max(10, self.width - self.margin_left - self.margin_right)
+        self.plot_h = max(10, self.height - self.margin_top - self.margin_bottom)
+        self._redraw_all()
+
     def _init_surface(self) -> None:
         self.surface.fill((16, 20, 26))
         # Draw border
@@ -276,10 +310,10 @@ class LiveFitnessChart:
         self.surface.blit(title_img, (12, 10))
 
         legends = [
-            ("Ant Best", (50, 240, 90)),
-            ("Ant Avg", (20, 150, 55)),
-            ("Spider Best", (255, 80, 80)),
-            ("Spider Avg", (180, 35, 35)),
+            ("ABest", (50, 240, 90)),
+            ("AAvg", (20, 150, 55)),
+            ("SBest", (255, 80, 80)),
+            ("SAvg", (180, 35, 35)),
         ]
         lx = self.width - 340
         for label, color in legends:
@@ -361,6 +395,7 @@ class LiveFitnessChart:
                 self._draw_segment(self.history[-2], self.history[-1])
 
 
+_commands_font: pygame.font.Font | None = None
 _stats_font: pygame.font.Font | None = None
 
 
@@ -378,14 +413,14 @@ def draw_window_b_panel(
     if _stats_font is None:
         _stats_font = pygame.font.SysFont("Consolas, Courier, monospace", 14, bold=True)
 
-    # Import species classes dynamically to compute metrics
+    # Import species classes dynamically to compute metrics if needed
     from species.ant import Ant
     from species.spider import Spider
 
     ant_m = get_species_metrics(world, Ant)
     spider_m = get_species_metrics(world, Spider)
 
-    # Update live chart every 30s
+    # Update live chart every interval
     chart.update(
         world.round_time,
         ant_m["best_fitness"],
@@ -396,46 +431,49 @@ def draw_window_b_panel(
 
     ultra_mode = getattr(simulation, "ultra_mode", False)
     sim_speed = getattr(simulation, "speed_multiplier", 1.0)
-
-    def _format_bound_pair(cur: float, bound: float, is_float: bool = False) -> str:
-        b_str = f"{bound:.0f}" if bound % 1 == 0 else f"{bound:.1f}"
-        c_str = f"{cur:.1f}" if is_float else f"{int(cur)}"
-        return f"{c_str}/{b_str}"
-
-    ab = ant_m.get("metric_bounds", {})
-    sb = spider_m.get("metric_bounds", {})
-
     generation = int(world.round_time / GENERATION_DURATION) + 1
 
     top_lines: list[tuple[str, tuple[int, int, int]]] = [
         ("=== ECOSYSTEM STATS & EVOLUTION MONITOR ===", (0, 220, 230)),
         (f"Time: {world.round_time:.1f}s | Gen: {generation} | Speed: {sim_speed}x | Ultra [U]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
-        (f"[ANT STATS]      Alive: {ant_m['alive']}/{ant_m['max_pop']} (All-Time: {ant_m['all_time_count']})", HUD_ACCENT_COLOR),
-        (f"  Fitness        Best: {ant_m['best_fitness']:6.1f} | Avg: {ant_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Food Eaten     Best: {ant_m['best_food']:3d} ({ant_m['best_computed_food']:4.1f}) | Avg: {ant_m['avg_food']:4.1f} ({ant_m['avg_computed_food']:4.1f})", HUD_TEXT_COLOR),
-        (f"  Enemies Touch  Best: {ant_m['best_enemies']:3d} ({ant_m['best_computed_enemies']:4.1f}) | Avg: {ant_m['avg_enemies']:4.1f} ({ant_m['avg_computed_enemies']:4.1f})", HUD_TEXT_COLOR),
-        (f"  Lifetime       Best: {ant_m['best_lifetime']:6.1f}s| Avg: {ant_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
-        ("  -- ANT METRIC BOUNDS (Max Current / Expected Bound) --", (120, 230, 240)),
-        (f"  Surv: {_format_bound_pair(*ab.get('survival_time', (0, 100)), True):>7} | Food: {_format_bound_pair(*ab.get('food_eaten', (0, 30)))} ({_format_bound_pair(*ab.get('computed_food_eaten', (0, 105)), True)}) | Touch: {_format_bound_pair(*ab.get('enemies_touched', (0, 50)))} ({_format_bound_pair(*ab.get('computed_enemies_touched', (0, 75)), True)})", HUD_TEXT_COLOR),
-        (f"  Tiles: {_format_bound_pair(*ab.get('tiles_covered', (0, 300))):>8} | Eat/Nth: {_format_bound_pair(*ab.get('times_eating_for_nothing', (0, 50))):>7} | Atk/Nth: {_format_bound_pair(*ab.get('times_attacking_for_nothing', (0, 50))):>5}", HUD_TEXT_COLOR),
-        (f"  Pheromones : {_format_bound_pair(*ab.get('follow_pheromones', (0, 100)), True)}", HUD_TEXT_COLOR),
-        ("---------------------------------------------------------", (60, 75, 90)),
-        (f"[SPIDER STATS]   Alive: {spider_m['alive']}/{spider_m['max_pop']} (All-Time: {spider_m['all_time_count']})", SPIDER_ACCENT_COLOR),
-        (f"  Fitness        Best: {spider_m['best_fitness']:6.1f} | Avg: {spider_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Food Eaten     Best: {spider_m['best_food']:3d} ({spider_m['best_computed_food']:4.1f}) | Avg: {spider_m['avg_food']:4.1f} ({spider_m['avg_computed_food']:4.1f})", HUD_TEXT_COLOR),
-        (f"  Enemies Touch  Best: {spider_m['best_enemies']:3d} ({spider_m['best_computed_enemies']:4.1f}) | Avg: {spider_m['avg_enemies']:4.1f} ({spider_m['avg_computed_enemies']:4.1f})", HUD_TEXT_COLOR),
-        (f"  Lifetime       Best: {spider_m['best_lifetime']:6.1f}s| Avg: {spider_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
-        ("  -- SPIDER METRIC BOUNDS (Max Current / Expected Bound) --", (255, 150, 150)),
-        (f"  Surv: {_format_bound_pair(*sb.get('survival_time', (0, 150)), True):>7} | Food: {_format_bound_pair(*sb.get('food_eaten', (0, 30)))} ({_format_bound_pair(*sb.get('computed_food_eaten', (0, 75)), True)}) | Touch: {_format_bound_pair(*sb.get('enemies_touched', (0, 50)))} ({_format_bound_pair(*sb.get('computed_enemies_touched', (0, 120)), True)})", HUD_TEXT_COLOR),
-        (f"  Tiles: {_format_bound_pair(*sb.get('tiles_covered', (0, 300))):>8} | Eat/Nth: {_format_bound_pair(*sb.get('times_eating_for_nothing', (0, 50))):>7} | Atk/Nth: {_format_bound_pair(*sb.get('times_attacking_for_nothing', (0, 50))):>5}", HUD_TEXT_COLOR),
-        ("---------------------------------------------------------", (60, 75, 90)),
-        ("[KEYS] [U] Ultra Mode  [SPACE] Pause  [P] Save", (210, 215, 225)),
-        ("       [S] Sensors     [F] Plot    [1-8] Spd  [W] WinB", (210, 215, 225)),
     ]
 
-    _draw_floating_box(surface, _stats_font, top_lines, pos_x=14, pos_y=12, align_right=False, border_color=(0, 173, 181, 180))
+    active_species = getattr(world, "active_species", list(world.creatures.keys()))
+    for cls in active_species:
+        species_name = getattr(cls, "species_name", cls.__name__)
+        m = get_species_metrics(world, cls)
+        color = HUD_ACCENT_COLOR if species_name == "Ant" else (SPIDER_ACCENT_COLOR if species_name == "Spider" else (200, 220, 255))
 
-    # Blit live chart onto bottom of Window B
-    chart_rect = chart.surface.get_rect(topleft=(14, 495))
+        best_food_s = f"{m['best_food']:d} ({m['best_computed_food']:.1f})"
+        avg_food_s = f"{m['avg_food']:.1f} ({m['avg_computed_food']:.1f})"
+        best_enemies_s = f"{m['best_enemies']:d} ({m['best_computed_enemies']:.1f})"
+        avg_enemies_s = f"{m['avg_enemies']:.1f} ({m['avg_computed_enemies']:.1f})"
+        best_life_s = f"{m['best_lifetime']:.1f}s"
+        avg_life_s = f"{m['avg_lifetime']:.1f}s"
+
+        top_lines.append((f"[{species_name.upper()} STATS]      Alive: {m['alive']}/{m['max_pop']} (All-Time: {m['all_time_count']})", color))
+        top_lines.append((f"  {'Fitness':<14} Best: {m['best_fitness']:>12.1f} | Avg: {m['avg_fitness']:>12.1f}", HUD_TEXT_COLOR))
+        top_lines.append((f"  {'Food Eaten':<14} Best: {best_food_s:>12} | Avg: {avg_food_s:>12}", HUD_TEXT_COLOR))
+        top_lines.append((f"  {'Enemies Touch':<14} Best: {best_enemies_s:>12} | Avg: {avg_enemies_s:>12}", HUD_TEXT_COLOR))
+        top_lines.append((f"  {'Lifetime':<14} Best: {best_life_s:>12} | Avg: {avg_life_s:>12}", HUD_TEXT_COLOR))
+        top_lines.append(("---------------------------------------------------------", (60, 75, 90)))
+
+    stats_rect = _draw_floating_box(surface, _stats_font, top_lines, pos_x=14, pos_y=12, align_right=False, border_color=(0, 173, 181, 180))
+
+    # Draw commands box at the top right of Window B (Stats Window)
+    global _commands_font
+    if _commands_font is None:
+        _commands_font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
+    draw_commands_box(surface, _commands_font, pos_x=surface.get_width() - 14, pos_y=12, align_right=True)
+
+    # Position graph right below the stats box to fill all remaining blank space down to bottom margin
+    chart_y = stats_rect.bottom + 14 if stats_rect else 360
+    chart_h = max(100, surface.get_height() - chart_y - 14)
+    chart_w = max(100, surface.get_width() - 28)
+    if chart.width != chart_w or chart.height != chart_h:
+        chart.resize(chart_w, chart_h)
+
+    # Blit live chart onto Window B
+    chart_rect = chart.surface.get_rect(topleft=(14, chart_y))
     surface.blit(chart.surface, chart_rect)

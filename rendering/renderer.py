@@ -32,6 +32,7 @@ from core.constants import (
 from rendering.ui import (
     draw_health_bar,
     draw_fps_box,
+    draw_commands_box,
     draw_window_b_panel,
     LiveFitnessChart,
 )
@@ -63,7 +64,7 @@ class Renderer:
         self.rend_a = sdl2_video.Renderer(self.win_a)
         self.surface_a = pygame.Surface((self.width, self.height))
 
-        self.stats_width: int = 680
+        self.stats_width: int = 760
         self.stats_height: int = 840
         self.win_b = sdl2_video.Window("Ants vs Spiders — Stats & Chart Panel", size=(self.stats_width, self.stats_height))
         self.rend_b = sdl2_video.Renderer(self.win_b)
@@ -80,6 +81,7 @@ class Renderer:
 
         self.clock: pygame.time.Clock = pygame.time.Clock()
         self.font: pygame.font.Font = pygame.font.SysFont("Consolas, Courier, monospace", HUD_FONT_SIZE, bold=True)
+        self.commands_font: pygame.font.Font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
         self.show_sensors: bool = False
 
         # Load sprites dynamically from assets directory

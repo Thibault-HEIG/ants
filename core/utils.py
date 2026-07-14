@@ -50,11 +50,25 @@ def point_in_rect(point: np.ndarray, width: float, height: float) -> bool:
 
 
 class SpeciesStats:
-    """Tracks simulation-wide historical maximums dynamically per species."""
+    """Tracks simulation-wide historical maximums and cumulative totals dynamically per species."""
     max_lifetime: dict[str, float] = {}
     max_foodeaten: dict[str, int] = {}
     max_enemies_touched: dict[str, int] = {}
     max_metrics: dict[str, dict[str, float]] = {}
+
+    # All-time historical maximums across all creatures ever spawned
+    max_fitness: dict[str, float] = {}
+    max_computed_food: dict[str, float] = {}
+    max_computed_enemies: dict[str, float] = {}
+
+    # Accumulators for all creatures that have died (to compute all-time averages combined with living)
+    total_dead_count: dict[str, int] = {}
+    sum_dead_fitness: dict[str, float] = {}
+    sum_dead_food: dict[str, float] = {}
+    sum_dead_computed_food: dict[str, float] = {}
+    sum_dead_enemies: dict[str, float] = {}
+    sum_dead_computed_enemies: dict[str, float] = {}
+    sum_dead_lifetime: dict[str, float] = {}
 
     # Backwards compatibility attributes
     ant_max_lifetime: float = 1e-5
@@ -72,6 +86,17 @@ class SpeciesStats:
         cls.max_foodeaten.clear()
         cls.max_enemies_touched.clear()
         cls.max_metrics.clear()
+        cls.max_fitness.clear()
+        cls.max_computed_food.clear()
+        cls.max_computed_enemies.clear()
+
+        cls.total_dead_count.clear()
+        cls.sum_dead_fitness.clear()
+        cls.sum_dead_food.clear()
+        cls.sum_dead_computed_food.clear()
+        cls.sum_dead_enemies.clear()
+        cls.sum_dead_computed_enemies.clear()
+        cls.sum_dead_lifetime.clear()
 
         cls.ant_max_lifetime = 1e-5
         cls.ant_max_foodeaten = 1
@@ -80,6 +105,20 @@ class SpeciesStats:
         cls.spider_max_lifetime = 1e-5
         cls.spider_max_foodeaten = 1
         cls.spider_max_enemies_touched = 1
+
+    @classmethod
+    def record_dead_creature(cls, creature: Any) -> None:
+        """Record final stats of a creature upon death or generation completion for all-time averages."""
+        species_name = getattr(creature, "species_name", getattr(type(creature), "species_name", type(creature).__name__))
+        cls.total_dead_count[species_name] = cls.total_dead_count.get(species_name, 0) + 1
+        cls.sum_dead_fitness[species_name] = cls.sum_dead_fitness.get(species_name, 0.0) + float(creature.compute_fitness())
+        cls.sum_dead_food[species_name] = cls.sum_dead_food.get(species_name, 0.0) + float(getattr(creature, "food_eaten", 0))
+        cls.sum_dead_computed_food[species_name] = cls.sum_dead_computed_food.get(species_name, 0.0) + float(getattr(creature, "computed_food_eaten", 0.0))
+        cls.sum_dead_enemies[species_name] = cls.sum_dead_enemies.get(species_name, 0.0) + float(getattr(creature, "enemies_touched", 0))
+        cls.sum_dead_computed_enemies[species_name] = cls.sum_dead_computed_enemies.get(species_name, 0.0) + float(getattr(creature, "computed_enemies_touched", 0.0))
+        cls.sum_dead_lifetime[species_name] = cls.sum_dead_lifetime.get(species_name, 0.0) + float(getattr(creature, "survival_time", 0.0))
+        cls.update_metrics(creature)
+        cls.update(species_name, float(getattr(creature, "survival_time", 0.0)), int(getattr(creature, "food_eaten", 0)), int(getattr(creature, "enemies_touched", 0)))
 
     @classmethod
     def update_metrics(cls, creature: Any) -> None:
@@ -91,6 +130,22 @@ class SpeciesStats:
             value = float(getattr(creature, metric_name, 0.0))
             if value > cls.max_metrics[species_name].get(metric_name, 0.0):
                 cls.max_metrics[species_name][metric_name] = value
+
+        # Track all-time peak fitness and computed scores
+        try:
+            fit = float(creature.compute_fitness())
+            if fit > cls.max_fitness.get(species_name, 0.0):
+                cls.max_fitness[species_name] = fit
+        except Exception:
+            pass
+
+        cf = float(getattr(creature, "computed_food_eaten", 0.0))
+        if cf > cls.max_computed_food.get(species_name, 0.0):
+            cls.max_computed_food[species_name] = cf
+
+        ce = float(getattr(creature, "computed_enemies_touched", 0.0))
+        if ce > cls.max_computed_enemies.get(species_name, 0.0):
+            cls.max_computed_enemies[species_name] = ce
 
     @classmethod
     def update(cls, species_name: str, lifetime: float, foodeaten: int, enemies_touched: int) -> None:
@@ -120,3 +175,4 @@ class SpeciesStats:
 
 
 GlobalStats = SpeciesStats
+

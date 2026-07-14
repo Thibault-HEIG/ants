@@ -21,8 +21,8 @@ CONTINUOUS_SELECTION_FRACTION: float = 0.1
 # ---------------------------------------------------------------------------
 GENERATIONAL_MUTATION_RATE: float = 0.1
 GENERATIONAL_MUTATION_STRENGTH: float = 0.5
-EXTINCTION_MUTATION_RATE: float = GENERATIONAL_MUTATION_RATE + 0.3 # if the specie extincts
-EXTINCTION_MUTATION_STRENGTH: float = GENERATIONAL_MUTATION_STRENGTH + 0.5 # if the specie extincts
+EXTINCTION_MUTATION_RATE: float = GENERATIONAL_MUTATION_RATE + 0.1 # if the specie extincts
+EXTINCTION_MUTATION_STRENGTH: float = GENERATIONAL_MUTATION_STRENGTH + 0.2 # if the specie extincts
 GENERATIONAL_SELECTION_FRACTION: float = 0.2
 GENERATION_DURATION: float = 140.0               # seconds per generation
 
