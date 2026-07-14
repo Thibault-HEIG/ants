@@ -168,28 +168,38 @@ def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
     if all_creatures:
         best_fitness = max(c.compute_fitness() for c in all_creatures)
         best_food = max(getattr(c, "food_eaten", 0) for c in all_creatures)
+        best_computed_food = max(getattr(c, "computed_food_eaten", 0.0) for c in all_creatures)
         best_enemies = max(getattr(c, "enemies_touched", 0) for c in all_creatures)
+        best_computed_enemies = max(getattr(c, "computed_enemies_touched", 0.0) for c in all_creatures)
         best_lifetime = max(getattr(c, "survival_time", 0.0) for c in all_creatures)
     else:
         best_fitness = 0.0
         best_food = 0
+        best_computed_food = 0.0
         best_enemies = 0
+        best_computed_enemies = 0.0
         best_lifetime = 0.0
 
     if living:
         avg_fitness = sum(c.compute_fitness() for c in living) / len(living)
         avg_food = sum(getattr(c, "food_eaten", 0) for c in living) / len(living)
+        avg_computed_food = sum(getattr(c, "computed_food_eaten", 0.0) for c in living) / len(living)
         avg_enemies = sum(getattr(c, "enemies_touched", 0) for c in living) / len(living)
+        avg_computed_enemies = sum(getattr(c, "computed_enemies_touched", 0.0) for c in living) / len(living)
         avg_lifetime = sum(getattr(c, "survival_time", 0.0) for c in living) / len(living)
     elif all_creatures:
         avg_fitness = sum(c.compute_fitness() for c in all_creatures) / len(all_creatures)
         avg_food = sum(getattr(c, "food_eaten", 0) for c in all_creatures) / len(all_creatures)
+        avg_computed_food = sum(getattr(c, "computed_food_eaten", 0.0) for c in all_creatures) / len(all_creatures)
         avg_enemies = sum(getattr(c, "enemies_touched", 0) for c in all_creatures) / len(all_creatures)
+        avg_computed_enemies = sum(getattr(c, "computed_enemies_touched", 0.0) for c in all_creatures) / len(all_creatures)
         avg_lifetime = sum(getattr(c, "survival_time", 0.0) for c in all_creatures) / len(all_creatures)
     else:
         avg_fitness = 0.0
         avg_food = 0.0
+        avg_computed_food = 0.0
         avg_enemies = 0.0
+        avg_computed_enemies = 0.0
         avg_lifetime = 0.0
 
     species_name = getattr(cls, "species_name", cls.__name__)
@@ -210,9 +220,13 @@ def get_species_metrics(world: Any, cls: type) -> dict[str, Any]:
         "best_fitness": float(best_fitness),
         "avg_fitness": float(avg_fitness),
         "best_food": int(best_food),
+        "best_computed_food": float(best_computed_food),
         "avg_food": float(avg_food),
+        "avg_computed_food": float(avg_computed_food),
         "best_enemies": int(best_enemies),
+        "best_computed_enemies": float(best_computed_enemies),
         "avg_enemies": float(avg_enemies),
+        "avg_computed_enemies": float(avg_computed_enemies),
         "best_lifetime": float(best_lifetime),
         "avg_lifetime": float(avg_lifetime),
     }
@@ -399,21 +413,21 @@ def draw_window_b_panel(
         ("---------------------------------------------------------", (60, 75, 90)),
         (f"[ANT STATS]      Alive: {ant_m['alive']}/{ant_m['max_pop']} (All-Time: {ant_m['all_time_count']})", HUD_ACCENT_COLOR),
         (f"  Fitness        Best: {ant_m['best_fitness']:6.1f} | Avg: {ant_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Food Eaten     Best: {ant_m['best_food']:6d} | Avg: {ant_m['avg_food']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Enemies Touch  Best: {ant_m['best_enemies']:6d} | Avg: {ant_m['avg_enemies']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Food Eaten     Best: {ant_m['best_food']:3d} ({ant_m['best_computed_food']:4.1f}) | Avg: {ant_m['avg_food']:4.1f} ({ant_m['avg_computed_food']:4.1f})", HUD_TEXT_COLOR),
+        (f"  Enemies Touch  Best: {ant_m['best_enemies']:3d} ({ant_m['best_computed_enemies']:4.1f}) | Avg: {ant_m['avg_enemies']:4.1f} ({ant_m['avg_computed_enemies']:4.1f})", HUD_TEXT_COLOR),
         (f"  Lifetime       Best: {ant_m['best_lifetime']:6.1f}s| Avg: {ant_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
         ("  -- ANT METRIC BOUNDS (Max Current / Expected Bound) --", (120, 230, 240)),
-        (f"  Surv: {_format_bound_pair(*ab.get('survival_time', (0, 100)), True):>9} | Food   : {_format_bound_pair(*ab.get('food_eaten', (0, 30))):>7} | Touch: {_format_bound_pair(*ab.get('enemies_touched', (0, 50))):>7}", HUD_TEXT_COLOR),
+        (f"  Surv: {_format_bound_pair(*ab.get('survival_time', (0, 100)), True):>7} | Food: {_format_bound_pair(*ab.get('food_eaten', (0, 30)))} ({_format_bound_pair(*ab.get('computed_food_eaten', (0, 105)), True)}) | Touch: {_format_bound_pair(*ab.get('enemies_touched', (0, 50)))} ({_format_bound_pair(*ab.get('computed_enemies_touched', (0, 75)), True)})", HUD_TEXT_COLOR),
         (f"  Tiles: {_format_bound_pair(*ab.get('tiles_covered', (0, 300))):>8} | Eat/Nth: {_format_bound_pair(*ab.get('times_eating_for_nothing', (0, 50))):>7} | Atk/Nth: {_format_bound_pair(*ab.get('times_attacking_for_nothing', (0, 50))):>5}", HUD_TEXT_COLOR),
         (f"  Pheromones : {_format_bound_pair(*ab.get('follow_pheromones', (0, 100)), True)}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
         (f"[SPIDER STATS]   Alive: {spider_m['alive']}/{spider_m['max_pop']} (All-Time: {spider_m['all_time_count']})", SPIDER_ACCENT_COLOR),
         (f"  Fitness        Best: {spider_m['best_fitness']:6.1f} | Avg: {spider_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Food Eaten     Best: {spider_m['best_food']:6d} | Avg: {spider_m['avg_food']:6.1f}", HUD_TEXT_COLOR),
-        (f"  Enemies Touch  Best: {spider_m['best_enemies']:6d} | Avg: {spider_m['avg_enemies']:6.1f}", HUD_TEXT_COLOR),
+        (f"  Food Eaten     Best: {spider_m['best_food']:3d} ({spider_m['best_computed_food']:4.1f}) | Avg: {spider_m['avg_food']:4.1f} ({spider_m['avg_computed_food']:4.1f})", HUD_TEXT_COLOR),
+        (f"  Enemies Touch  Best: {spider_m['best_enemies']:3d} ({spider_m['best_computed_enemies']:4.1f}) | Avg: {spider_m['avg_enemies']:4.1f} ({spider_m['avg_computed_enemies']:4.1f})", HUD_TEXT_COLOR),
         (f"  Lifetime       Best: {spider_m['best_lifetime']:6.1f}s| Avg: {spider_m['avg_lifetime']:6.1f}s", HUD_TEXT_COLOR),
         ("  -- SPIDER METRIC BOUNDS (Max Current / Expected Bound) --", (255, 150, 150)),
-        (f"  Surv: {_format_bound_pair(*sb.get('survival_time', (0, 150)), True):>9} | Food   : {_format_bound_pair(*sb.get('food_eaten', (0, 30))):>7} | Touch: {_format_bound_pair(*sb.get('enemies_touched', (0, 50))):>7}", HUD_TEXT_COLOR),
+        (f"  Surv: {_format_bound_pair(*sb.get('survival_time', (0, 150)), True):>7} | Food: {_format_bound_pair(*sb.get('food_eaten', (0, 30)))} ({_format_bound_pair(*sb.get('computed_food_eaten', (0, 75)), True)}) | Touch: {_format_bound_pair(*sb.get('enemies_touched', (0, 50)))} ({_format_bound_pair(*sb.get('computed_enemies_touched', (0, 120)), True)})", HUD_TEXT_COLOR),
         (f"  Tiles: {_format_bound_pair(*sb.get('tiles_covered', (0, 300))):>8} | Eat/Nth: {_format_bound_pair(*sb.get('times_eating_for_nothing', (0, 50))):>7} | Atk/Nth: {_format_bound_pair(*sb.get('times_attacking_for_nothing', (0, 50))):>5}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
         ("[KEYS] [U] Ultra Mode  [SPACE] Pause  [P] Save", (210, 215, 225)),

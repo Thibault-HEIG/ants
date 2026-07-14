@@ -5,7 +5,7 @@ ant_constants.py — Dedicated Parameters and Fitness Weights for Ants
 Stores all species-specific configuration, physical limitations, sensory ranges,
 and fitness weights for the Ant species.
 """
-from core.constants import SENSOR_ANGLE, WORLD_HEIGHT, WORLD_WIDTH
+from core.constants import SENSOR_ANGLE, WORLD_HEIGHT, WORLD_WIDTH, GENERATION_DURATION
 
 # Population and Lifecycle
 ANT_COUNT: int = 80
@@ -35,13 +35,13 @@ PHEROMONE_DURATION: float = 10.0
 # Bounds for fitness normalization
 # ---------------------------------------------------------------------------
 ANT_METRIC_BOUNDS: dict[str, float] = {
-    "survival_time": 200.0,
-    "food_eaten": 70.0,
-    "enemies_touched": 30.0,
-    "times_eating_for_nothing": 100.0,
-    "times_attacking_for_nothing": 100.0,
+    "survival_time": GENERATION_DURATION, # generation: GENERATION_DURATION - max: 300.0
+    "computed_food_eaten": 30.0,
+    "computed_enemies_touched": 30.0,
+    "times_eating_for_nothing": 50.0,
+    "times_attacking_for_nothing": 150.0,
     "follow_pheromones": 100.0,
-    "tiles_covered": WORLD_HEIGHT * WORLD_WIDTH,
+    "tiles_covered": (WORLD_HEIGHT * WORLD_WIDTH) / 900, # Realitic coverage is 1/900
 }
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ ANT_METRIC_BOUNDS: dict[str, float] = {
 # Behavior
 FITNESS_SURVIVAL_WEIGHT: float = 10.0 # 0.0
 FITNESS_TILES_COVERED_WEIGHT: float = 10.0 # 10.0
-FITNESS_FOLLOW_PHEROMONES_WEIGHT: float = 20.0 # 20.0
+FITNESS_FOLLOW_PHEROMONES_WEIGHT: float = 10.0 # 10.0
 
 FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 0.05 # 5%
 

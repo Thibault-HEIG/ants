@@ -93,11 +93,11 @@ class Spider(Creature):
         self.brain_originality = self.compute_brain_originality()
         
         # Food
-        food_eaten = self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
+        food_eaten = self.normalize_metric("computed_food_eaten") * FITNESS_FOOD_WEIGHT
         eating_for_nothing = self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
         
         # Combat
-        enemies_touched = self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
+        enemies_touched = self.normalize_metric("computed_enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
         attacking_for_nothing = self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
         
         # Behavior

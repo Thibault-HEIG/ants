@@ -274,19 +274,8 @@ class World:
         available = max_pop - len(pop)
 
         if len(pop) == 0:
-            # Extinction recovery: repopulate from fittest dead ancestors (or fresh)
-            dead_pool = self.dead_creatures.get(cls, [])
-            init_count = getattr(cls, "initial_count", 10)
-            if dead_pool:
-                from evolution.genetics import create_offspring_batch
-                new_genomes = create_offspring_batch(
-                    dead_pool, init_count, self.rng, npc=self.is_npc(cls)
-                )
-                self._spawn_species(cls, new_genomes)
-                self.dead_creatures[cls].clear()
-            else:
-                self._spawn_species(cls)
-            self.repro_timers[cls] = 0.0
+            # Extinction recovery: reset ALL species so no species keeps an unfair advantage
+            self._reset_all_species_on_extinction(extinct_cls=cls)
         elif available > 0 and len(pop) >= 1:
             self.repro_timers[cls] += dt * available
             while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
@@ -319,7 +308,10 @@ class World:
         """Advance generation timer and trigger end-of-generation if due."""
         self.generation_timers[cls] += dt
         pop = self.creatures[cls]
-        if self.generation_timers[cls] >= GENERATION_DURATION or len(pop) == 0:
+        if len(pop) == 0:
+            # Extinction: reset ALL species so no species keeps an unfair advantage
+            self._reset_all_species_on_extinction(extinct_cls=cls)
+        elif self.generation_timers[cls] >= GENERATION_DURATION:
             self._end_generation(cls)
 
     def _end_generation(self, cls: type) -> None:
@@ -375,10 +367,11 @@ class World:
             self.creatures[cls].append(creature)
             self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
 
-        # Reset generation state — do NOT touch food, pheromones, lakes, or other species
+        # Reset generation state — pheromones are world state, not evolution state, so clear them
         self.dead_creatures[cls].clear()
         self.generation_timers[cls] = 0.0
         self.generation_counts[cls] += 1
+        self.pheromone_grid.fill(0.0)
 
     def _select_parent(self, creatures: list[Any], cls: type | None = None) -> Any:
         """Select a parent alternating 1/2 best individual, 1/2 random from top 20% best parents."""
@@ -396,6 +389,46 @@ class World:
         top_20_count = max(1, int(len(scored) * 0.20))
         top_pool = scored[:top_20_count]
         return top_pool[int(self.rng.integers(len(top_pool)))]
+
+    def _reset_all_species_on_extinction(self, extinct_cls: type) -> None:
+        """Reset every species when one goes extinct so no species keeps an unfair head-start.
+
+        The extinct species is repopulated from its dead pool (or fresh if empty).
+        Every other species is repopulated from its current fittest living + dead creatures.
+        Pheromone trails are also cleared.
+        """
+        from evolution.genetics import create_offspring_batch
+
+        for cls in self.active_species:
+            init_count = getattr(cls, "initial_count", 10)
+            npc = self.is_npc(cls)
+
+            if cls == extinct_cls:
+                # Extinct species: rebuild from dead pool or fresh
+                dead_pool = self.dead_creatures.get(cls, [])
+                if dead_pool:
+                    new_genomes = create_offspring_batch(
+                        dead_pool, init_count, self.rng, npc=npc
+                    )
+                    self._spawn_species(cls, new_genomes)
+                else:
+                    self._spawn_species(cls)
+            else:
+                # Other species: rebuild from fittest living + dead
+                pool = list(self.creatures.get(cls, [])) + list(self.dead_creatures.get(cls, []))
+                if pool:
+                    new_genomes = create_offspring_batch(
+                        pool, init_count, self.rng, npc=npc
+                    )
+                    self._spawn_species(cls, new_genomes)
+                else:
+                    self._spawn_species(cls)
+
+            self.repro_timers[cls] = 0.0
+            self.generation_timers[cls] = 0.0
+
+        # Pheromones are world state independent from evolution — clear them
+        self.pheromone_grid.fill(0.0)
 
     def _spawn_species(self, cls: type, genomes: list[np.ndarray] | None = None) -> None:
         """Spawn initial population for a given species class."""

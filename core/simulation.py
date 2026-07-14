@@ -289,8 +289,8 @@ class Simulation:
 
         recap_metrics = [
             "survival_time",
-            "food_eaten",
-            "enemies_touched",
+            "computed_food_eaten",
+            "computed_enemies_touched",
             "times_eating_for_nothing",
             "times_attacking_for_nothing",
             "tiles_covered",

@@ -128,7 +128,7 @@ def resolve_combat(
                 threshold = reach + target.radius
                 if dx * dx + dy * dy < threshold * threshold:
                     target.take_damage(attacker.damage)
-                    attacker.enemies_touched += 1
+                    attacker.touch_enemy()
                     hit_any = True
 
             if not hit_any:

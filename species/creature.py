@@ -107,8 +107,10 @@ class Creature(ABC):
 
         # --- Fitness tracking ---
         self.food_eaten: int = 0
+        self.computed_food_eaten: float = 0.0
         self.survival_time: float = 0.0
         self.enemies_touched: int = 0
+        self.computed_enemies_touched: float = 0.0
         self.distance_walked: float = 0.0
         self.times_eating_for_nothing: int = 0
         self.times_attacking_for_nothing: int = 0
@@ -259,9 +261,19 @@ class Creature(ABC):
         return self._max_speed
 
     def eat(self, food_value: float) -> None:
-        """Consume food and restore health up to maximum health."""
+        """Consume food and restore health up to maximum health, updating raw and computed food scores."""
+        hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
+        computed_increment = 0.75 / (0.5 + math.sqrt(hp_pct)) # score between 0.5 and 1.5
         self.health = min(self.health + food_value, self.max_health)
         self.food_eaten += 1
+        self.computed_food_eaten += computed_increment
+
+    def touch_enemy(self) -> None:
+        """Record hitting an enemy, updating both raw and computed scores based on current health."""
+        hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
+        computed_increment = 0.5 + hp_pct # score between 0.5 and 1.5
+        self.enemies_touched += 1
+        self.computed_enemies_touched += computed_increment
 
     def take_damage(self, amount: float) -> None:
         """Receive damage from an enemy attack."""
@@ -321,5 +333,6 @@ class Creature(ABC):
         eating = " [EATING]" if self.is_eating else ""
         return (
             f"{self.__class__.__name__}({status}{eating}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
-            f"hp={self.health:.1f}, food={self.food_eaten}, touches={self.enemies_touched}, tiles={self.tiles_covered})"
+            f"hp={self.health:.1f}, food={self.food_eaten}({self.computed_food_eaten:.1f}), "
+            f"touches={self.enemies_touched}({self.computed_enemies_touched:.1f}), tiles={self.tiles_covered})"
         )
