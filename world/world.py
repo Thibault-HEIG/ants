@@ -73,6 +73,7 @@ class World:
         # Dynamic containers keyed by species class
         self.creatures: dict[type, list[Any]] = {cls: [] for cls in self.active_species}
         self.dead_creatures: dict[type, list[Any]] = {cls: [] for cls in self.active_species}
+        self.all_time_counts: dict[type, int] = {cls: 0 for cls in self.active_species}
         self.repro_timers: dict[type, float] = {cls: 0.0 for cls in self.active_species}
         self._parent_alternate_state: dict[type, bool] = {cls: False for cls in self.active_species}
 
@@ -273,6 +274,7 @@ class World:
                         child.genome = mutate(parent.genome, self.rng)
                     child.world = self
                     self.creatures[cls].append(child)
+                    self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
             else:
                 self.repro_timers[cls] = 0.0
 
@@ -318,6 +320,7 @@ class World:
                     else:
                         creature.genome = mutate(parent_genome, self.rng)
             self.creatures[cls].append(creature)
+            self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
 
     def reset_with_genomes(
         self,
@@ -341,6 +344,7 @@ class World:
         self.environment.food_sources.clear()
         self.environment.source_cooldown = 0.0
         self.repro_timers = {cls: 0.0 for cls in self.active_species}
+        self.all_time_counts = {cls: 0 for cls in self.active_species}
         self.round_time = 0.0
         self.pheromone_grid.fill(0.0)
 

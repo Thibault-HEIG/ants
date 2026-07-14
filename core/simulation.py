@@ -28,8 +28,8 @@ from world.world import World
 # }
 # ---------------------------------------------------------------------------
 ACTIVE_SPECIES: dict[type, bool] = {
-    Ant: False,
-    Spider: True
+    Ant: True,
+    Spider: False
 }
 
 

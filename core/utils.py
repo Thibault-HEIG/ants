@@ -54,6 +54,7 @@ class SpeciesStats:
     max_lifetime: dict[str, float] = {}
     max_foodeaten: dict[str, int] = {}
     max_enemies_touched: dict[str, int] = {}
+    max_metrics: dict[str, dict[str, float]] = {}
 
     # Backwards compatibility attributes
     ant_max_lifetime: float = 1e-5
@@ -70,6 +71,7 @@ class SpeciesStats:
         cls.max_lifetime.clear()
         cls.max_foodeaten.clear()
         cls.max_enemies_touched.clear()
+        cls.max_metrics.clear()
 
         cls.ant_max_lifetime = 1e-5
         cls.ant_max_foodeaten = 1
@@ -78,6 +80,17 @@ class SpeciesStats:
         cls.spider_max_lifetime = 1e-5
         cls.spider_max_foodeaten = 1
         cls.spider_max_enemies_touched = 1
+
+    @classmethod
+    def update_metrics(cls, creature: Any) -> None:
+        species_name = getattr(creature, "species_name", "Unknown")
+        if species_name not in cls.max_metrics:
+            cls.max_metrics[species_name] = {}
+        metric_bounds = getattr(creature, "metrics", {})
+        for metric_name in metric_bounds:
+            value = float(getattr(creature, metric_name, 0.0))
+            if value > cls.max_metrics[species_name].get(metric_name, 0.0):
+                cls.max_metrics[species_name][metric_name] = value
 
     @classmethod
     def update(cls, species_name: str, lifetime: float, foodeaten: int, enemies_touched: int) -> None:

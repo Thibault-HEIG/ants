@@ -69,12 +69,11 @@ def create_offspring_batch(
     best_parent = parents[0]
 
     for i in range(population_size):
-        if i % 2 == 0:
-            parent = best_parent
-            child_genome = parent.genome.copy()  # Direct copy of the best parent
+        if npc or (i % 2 == 0):
+            child_genome = best_parent.genome.copy() # Direct copy of the best parent
         else:
             parent = parents[int(rng.integers(len(parents)))]
-            child_genome = parent.genome.copy() if npc else mutate(parent.genome, rng)
+            mutate(parent.genome, rng)
+            
         children.append(child_genome)
-
     return children

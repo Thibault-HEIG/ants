@@ -5,7 +5,7 @@ spider_constants.py — Dedicated Parameters and Fitness Weights for Spiders
 Stores all species-specific configuration, physical limitations, sensory ranges,
 and fitness weights for the Spider species.
 """
-from core.constants import SENSOR_ANGLE
+from core.constants import SENSOR_ANGLE, WORLD_HEIGHT, WORLD_WIDTH
 
 # Population and Lifecycle
 SPIDER_COUNT: int = 5
@@ -28,16 +28,29 @@ SPIDER_SENSOR_ANGLE: float = SENSOR_ANGLE
 DENSITY_RADIUS_SPIDER: float = SPIDER_SENSOR_RANGE
 
 # ---------------------------------------------------------------------------
+# Bounds for fitness normalization
+# ---------------------------------------------------------------------------
+SPIDER_METRIC_BOUNDS: dict[str, float] = {
+    "survival_time": 500.0,
+    "food_eaten": 50.0,
+    "enemies_touched": 50.0,
+    "times_eating_for_nothing": 100.0,
+    "times_attacking_for_nothing": 50.0,
+    "tiles_covered": WORLD_HEIGHT * WORLD_WIDTH,
+}
+
+# ---------------------------------------------------------------------------
 # Fitness Evaluation Weights
 # ---------------------------------------------------------------------------
 # Behavior
-FITNESS_SURVIVAL_WEIGHT: float = 0.0
-FITNESS_TILES_COVERED_WEIGHT: float = 10.0 # 10.0
-FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 10.0 # 10.0
+FITNESS_SURVIVAL_WEIGHT: float = 0.0 # 0.0
+FITNESS_TILES_COVERED_WEIGHT: float = 50.0 # 10.0
+
+FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 0.05 # 0.05%
 
 # Performance
-FITNESS_FOOD_WEIGHT: float = 20.0 # 20.0
-FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT: float = -10.0 # -10.0
+FITNESS_FOOD_WEIGHT: float = 50.0 # 20.0
+FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT: float = -30.0 # -10.0
 
-FITNESS_ENEMIES_TOUCHED_WEIGHT: float = 50.0 # 50.0
-FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -10.0 # So they attack more.
+FITNESS_ENEMIES_TOUCHED_WEIGHT: float = -50.0 # 50.0
+FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -50.0 # 0.0 So they attack more.

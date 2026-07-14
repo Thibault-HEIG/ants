@@ -8,11 +8,14 @@ Overrides species-specific constants and fitness evaluation logic.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from species.creature import Creature
 from species.spider_constants import SPIDER_MAX_SPEED
 from species.ant_constants import (
+    ANT_METRIC_BOUNDS,
     ANT_COUNT,
     ANT_INITIAL_HEALTH,
     ANT_MAX_SPEED,
@@ -52,6 +55,7 @@ class Ant(Creature):
 
     species_name: str = "Ant"
     npc: bool = False
+    metrics: dict[str, Any] = ANT_METRIC_BOUNDS
     initial_health: float = ANT_INITIAL_HEALTH
     max_speed: float = ANT_MAX_SPEED
     radius: float = float(ANT_RADIUS)
@@ -111,17 +115,25 @@ class Ant(Creature):
             world.pheromone_grid[cx, cy] = min(float(world.pheromone_grid[cx, cy]) + PHEROMONE_STRENGTH, 2.0)
             self._last_tile = (cx, cy)
             self._last_tile_strength = float(world.pheromone_grid[cx, cy])
-
+    
     def compute_fitness(self) -> float:
         """Calculate this ant's fitness score using normalized metrics and brain originality."""
         self.brain_originality = self.compute_brain_originality()
-        return (
-            self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
-            + self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
-            + self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
-            + self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
-            + self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
-            + self.normalize_metric("follow_pheromones") * FITNESS_FOLLOW_PHEROMONES_WEIGHT
-            + self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
-            + self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT
-        )
+        
+        # Food
+        food_eaten = self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
+        eating_for_nothing = self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
+        
+        # Combat
+        enemies_touched = self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
+        attacking_for_nothing = self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
+        
+        # Behavior
+        survival_time = self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
+        follow_pheromones = self.normalize_metric("follow_pheromones") * FITNESS_FOLLOW_PHEROMONES_WEIGHT
+        tiles_covered = self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
+        
+        # Total fitness
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered)
+        
+        return total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)

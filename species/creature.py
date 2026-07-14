@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -28,23 +28,6 @@ from evolution.sensors import Sensors
 
 if TYPE_CHECKING:
     from evolution.sensors import SensorData
-
-def map_to_unit(value: float, min_value: float, max_value: float) -> float:
-    """Map value linearly relative to [min_value, max_value] scale [0, 1 (not strict)]."""
-    if max_value > min_value:
-        return max(0.0, (float(value) - float(min_value)) / (float(max_value) - float(min_value)))
-    return 0.0
-
-# Static normalization bounds (min, max) for fitness metrics across a full lifetime
-STATIC_METRIC_BOUNDS: dict[str, tuple[float, float]] = {
-    "survival_time": (0.0, MAX_AGE_NORMALIZATION),
-    "food_eaten": (0.0, 30.0),
-    "enemies_touched": (0.0, 50.0),
-    "times_eating_for_nothing": (0.0, 50.0),
-    "times_attacking_for_nothing": (0.0, 50.0),
-    "follow_pheromones": (0.0, 100.0),
-    "tiles_covered": (0.0, 300.0),
-}
     
 class Creature(ABC):
     """Abstract base class representing an evolving autonomous agent.
@@ -59,6 +42,7 @@ class Creature(ABC):
 
     species_name: str = "Creature"
     npc: bool = False
+    metrics: dict[str, float] = {}
     initial_health: float = 100.0
     max_speed: float = 100.0
     radius: float = 10.0
@@ -264,6 +248,7 @@ class Creature(ABC):
         self.record_current_tile()
 
         SpeciesStats.update(self.species_name, float(self.survival_time), int(self.food_eaten), int(self.enemies_touched))
+        SpeciesStats.update_metrics(self)
 
         if self.health <= 0:
             self.health = 0.0
@@ -298,10 +283,13 @@ class Creature(ABC):
         return [self]
     
     def normalize_metric(self, metric_name: str) -> float:
-        """Map self's metric_name value to [0, 1] using expected static min/max bounds."""
         value = float(getattr(self, metric_name, 0.0))
-        min_val, max_val = STATIC_METRIC_BOUNDS.get(metric_name, (0.0, 1.0))
-        return map_to_unit(value, min_val, max_val)
+        max_value = getattr(self, "metrics", {}).get(metric_name, 1.0)
+        
+        """Map self's metric_name value to [0, 1+] using self.metrics table and root curve."""
+        """"1 is not the max, but a reference point for normalization. Values above 1 are possible."""
+        p = 0.3  # Concave mapping exponent
+        return max(0.0, (float(value) / max_value) ** p)
 
     def compute_brain_originality(self) -> float:
         """Calculate originality of this creature's brain relative to the living population mean.

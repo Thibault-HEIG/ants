@@ -8,10 +8,13 @@ Overrides species-specific constants, zone speed behaviors, and fitness logic.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from species.creature import Creature
 from species.spider_constants import (
+    SPIDER_METRIC_BOUNDS,
     SPIDER_COUNT,
     SPIDER_INITIAL_HEALTH,
     SPIDER_MAX_SPEED,
@@ -49,6 +52,7 @@ class Spider(Creature):
 
     species_name: str = "Spider"
     npc: bool = False
+    metrics: dict[str, Any] = SPIDER_METRIC_BOUNDS
     initial_health: float = SPIDER_INITIAL_HEALTH
     max_speed: float = SPIDER_MAX_SPEED
     radius: float = float(SPIDER_RADIUS)
@@ -85,14 +89,22 @@ class Spider(Creature):
         return self._max_speed
 
     def compute_fitness(self) -> float:
-        """Calculate this spider's fitness score using normalized metrics and brain originality."""
+        """Calculate this ant's fitness score using normalized metrics and brain originality."""
         self.brain_originality = self.compute_brain_originality()
-        return (
-            self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
-            + self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
-            + self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
-            + self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
-            + self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
-            + self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
-            + self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT
-        )
+        
+        # Food
+        food_eaten = self.normalize_metric("food_eaten") * FITNESS_FOOD_WEIGHT
+        eating_for_nothing = self.normalize_metric("times_eating_for_nothing") * FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT
+        
+        # Combat
+        enemies_touched = self.normalize_metric("enemies_touched") * FITNESS_ENEMIES_TOUCHED_WEIGHT
+        attacking_for_nothing = self.normalize_metric("times_attacking_for_nothing") * FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT
+        
+        # Behavior
+        survival_time = self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
+        tiles_covered = self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
+        
+        # Total fitness
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + survival_time + tiles_covered)
+        
+        return total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)

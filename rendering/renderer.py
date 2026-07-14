@@ -64,7 +64,7 @@ class Renderer:
         self.surface_a = pygame.Surface((self.width, self.height))
 
         self.stats_width: int = 680
-        self.stats_height: int = 720
+        self.stats_height: int = 840
         self.win_b = sdl2_video.Window("Ants vs Spiders — Stats & Chart Panel", size=(self.stats_width, self.stats_height))
         self.rend_b = sdl2_video.Renderer(self.win_b)
         self.surface_b = pygame.Surface((self.stats_width, self.stats_height))
