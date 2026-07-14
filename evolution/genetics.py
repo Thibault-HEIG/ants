@@ -12,14 +12,14 @@ from typing import Any
 
 import numpy as np
 
-from core.constants import SELECTION_FRACTION, MUTATION_RATE, MUTATION_STRENGTH
+from core.constants import CONTINUOUS_SELECTION_FRACTION, CONTINUOUS_MUTATION_RATE, CONTINUOUS_MUTATION_STRENGTH
 
 Creature = Any
 
 
 def select_parents(
     creatures: list[Creature],
-    top_fraction: float = SELECTION_FRACTION,
+    top_fraction: float = CONTINUOUS_SELECTION_FRACTION,
 ) -> list[Creature]:
     """Select the fittest creatures as parents for reproduction using truncation selection."""
     if not creatures:
@@ -36,8 +36,8 @@ def select_parents(
 def mutate(
     genome: np.ndarray,
     rng: np.random.Generator,
-    mutation_rate: float = MUTATION_RATE,
-    mutation_strength: float = MUTATION_STRENGTH,
+    mutation_rate: float = CONTINUOUS_MUTATION_RATE,
+    mutation_strength: float = CONTINUOUS_MUTATION_STRENGTH,
 ) -> np.ndarray:
     """Create a mutated copy of a genome by adding Gaussian noise to genes."""
     child = genome.copy()
@@ -70,10 +70,10 @@ def create_offspring_batch(
 
     for i in range(population_size):
         if npc or (i % 2 == 0):
-            child_genome = best_parent.genome.copy() # Direct copy of the best parent
+            child_genome = best_parent.genome.copy()
         else:
             parent = parents[int(rng.integers(len(parents)))]
-            mutate(parent.genome, rng)
-            
+            child_genome = mutate(parent.genome, rng)
+
         children.append(child_genome)
     return children

@@ -23,7 +23,6 @@ python3 -m core.engine
 | `↑` / `↓` | Increase / decrease simulation speed (0.5×–256×) |
 | `Space` | Pause / unpause |
 | `S` | Toggle vision ray / sensor visualization |
-| `R` | Restart simulation |
 | `U` | Activate ultra performance mode (no rendering) |
 | `P` | Save top brains in a JSON file |
 | `F` | Print the fitness curve in the terminal |
@@ -44,9 +43,7 @@ Sense → Think → Act → Evolve
 1. **Sense** — Eight directional vision rays and density sensors detect food, enemies, allies, and walls.
 2. **Think** — A neural network processes 71 sensor inputs and outputs `[turn, speed, attack, eat]`.
 3. **Act** — The creature moves and engages in combat according to the brain's decision.
-4. **Evolve** — Creatures that survive long enough reproduce (continuous evolution). Their children inherit mutated copies of the parent's brain weights.
-
-No arbitrary fitness function drives generational resets — evolution is **continuous**. A creature that survives above its reproduction threshold long enough spawns a mutated child nearby.
+4. **Evolve** — Depending on the species' configured evolution mode, reproduction happens either continuously (threshold-based spawning) or in fixed-length generational episodes (elitism-based replacement). Children inherit mutated copies of the parent's brain weights.
 
 ### The World
 
@@ -153,7 +150,18 @@ Counts of nearby allies and enemies within sensor range, normalised by a cap of 
 
 ## Evolution
 
-### Continuous Evolution
+Each species can use one of two reproduction modes, configured per-species in `SPECIES_CONFIG` inside `core/constants.py`:
+
+```python
+SPECIES_CONFIG: dict[str, dict] = {
+    "Ant":    {"active": True,  "reproduction_mode": "continuous",   "npc": False},
+    "Spider": {"active": False, "reproduction_mode": "generational", "npc": False},
+}
+```
+
+Setting `npc: True` disables mutation entirely — all offspring are exact genome copies (useful for static opponent baselines).
+
+### Continuous Mode
 
 Creatures reproduce **during the simulation** based on fitness ranking and population pressure:
 
@@ -162,10 +170,24 @@ Creatures reproduce **during the simulation** based on fitness ranking and popul
   `interval = THRESHOLD / (max_population - current_population)`
   
   When a population is small (many available slots), spawning happens rapidly. As the population approaches its cap, available slots approach zero, causing the spawn interval to increase dramatically and naturally stabilizing population numbers without exponential blowup.
+- **Extinction Recovery**: If the population drops to zero, the world repopulates from the fittest dead ancestors (or spawns fresh creatures if no dead pool exists).
+
+### Generational Mode
+
+Creatures live in fixed-length episodes (`GENERATION_DURATION`, default 60 s). At the end of each generation (or immediately if the population hits zero):
+
+1. **Ranking** — All creatures (living + dead during that generation) are ranked by fitness.
+2. **Elite Selection** — The top `GENERATIONAL_SELECTION_FRACTION` (default 20%) are selected as elites. Only their **genomes** are carried over — no HP, position, or stats.
+3. **Refill** — The full `initial_count` population is respawned at the kingdom:
+   - Elite genomes are re-used **unmutated**.
+   - Remaining slots are filled with **mutated children** of elites (round-robin parent selection).
+4. **Cleanup** — The dead pool is cleared, the generation timer resets, and the generation counter increments. Food, pheromones, lakes, and other species are untouched.
+
+If total extinction occurs with no dead pool (first-generation edge case), fresh random genomes are spawned with boosted mutation (`EXTINCTION_MUTATION_RATE` / `EXTINCTION_MUTATION_STRENGTH`) to force exploration.
 
 ### Mutation
 
-Every gene is mutated with Gaussian noise (mean, σ). There is no crossover — children are mutated clones of a single parent.
+Every gene is mutated with Gaussian noise (mean, σ). There is no crossover — children are mutated clones of a single parent. Each mode has its own `MUTATION_RATE` and `MUTATION_STRENGTH` constants (`CONTINUOUS_*` / `GENERATIONAL_*`).
 
 ### Fitness Function (to optimize)
 
@@ -249,7 +271,7 @@ main.py / core.engine
 
 ### Architectural Design Decisions
 - **`Creature` & `Entity` Abstractions**: All active agents inherit from `Creature`, while passive objects inherit from `Entity`. Common physics, vitals, neural hooks, and communication stubs live in the base classes.
-- **`ACTIVE_SPECIES` Isolation Engine**: In `core/simulation.py`, the `ACTIVE_SPECIES = [Ant, Spider]` list dictates which species exist. You can drop new species into this list or test a single species in isolation (`ACTIVE_SPECIES = [Ant]`) without changing any loop logic.
+- **`SPECIES_CONFIG` Isolation Engine**: In `core/constants.py`, the `SPECIES_CONFIG` dict defines which species are active, their reproduction mode (`"continuous"` or `"generational"`), and whether they are NPCs. You can toggle a species on/off or switch its evolution mode without changing any loop logic.
 - **Generic Sensing & Collision Resolution**: `world/physics.py` and `evolution/sensors.py` never hardcode class names. Combat and vision checks identify opponents dynamically by comparing class types.
 - **Decoupled Renderer**: `rendering/renderer.py` operates in read-only mode and loads sprites dynamically based on `species_name`. If a PNG is missing, it falls back cleanly to geometric rendering.
 

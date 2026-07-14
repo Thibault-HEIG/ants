@@ -8,7 +8,7 @@ and fitness weights for the Ant species.
 from core.constants import SENSOR_ANGLE, WORLD_HEIGHT, WORLD_WIDTH
 
 # Population and Lifecycle
-ANT_COUNT: int = 50
+ANT_COUNT: int = 80
 ANT_INITIAL_HEALTH: float = 100.0
 ANT_REPRODUCTION_THRESHOLD: float = 200.0
 MAX_ANTS: int = 300
@@ -35,11 +35,11 @@ PHEROMONE_DURATION: float = 10.0
 # Bounds for fitness normalization
 # ---------------------------------------------------------------------------
 ANT_METRIC_BOUNDS: dict[str, float] = {
-    "survival_time": 100.0,
+    "survival_time": 200.0,
     "food_eaten": 70.0,
     "enemies_touched": 30.0,
     "times_eating_for_nothing": 100.0,
-    "times_attacking_for_nothing": 30.0,
+    "times_attacking_for_nothing": 100.0,
     "follow_pheromones": 100.0,
     "tiles_covered": WORLD_HEIGHT * WORLD_WIDTH,
 }
@@ -48,15 +48,15 @@ ANT_METRIC_BOUNDS: dict[str, float] = {
 # Fitness Evaluation Weights
 # ---------------------------------------------------------------------------
 # Behavior
-FITNESS_SURVIVAL_WEIGHT: float = 0.0 # 0.0
+FITNESS_SURVIVAL_WEIGHT: float = 10.0 # 0.0
 FITNESS_TILES_COVERED_WEIGHT: float = 10.0 # 10.0
-FITNESS_FOLLOW_PHEROMONES_WEIGHT: float = 10.0 # 10.0
+FITNESS_FOLLOW_PHEROMONES_WEIGHT: float = 20.0 # 20.0
 
-FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 0.05 # 0.05%
+FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 0.05 # 5%
 
 # Peformance
 FITNESS_FOOD_WEIGHT: float = 30.0 # 30.0
 FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT: float = -10.0 # -10.0
 
 FITNESS_ENEMIES_TOUCHED_WEIGHT: float = 50.0 # 50.0
-FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -10.0 # So they attack more.
+FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -5.0 # -5.0 So they attack more.

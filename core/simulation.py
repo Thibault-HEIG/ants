@@ -13,23 +13,20 @@ from typing import Any
 
 import numpy as np
 
-from core.constants import RANDOM_SEED, SPEED_MULTIPLIERS
+from core.constants import RANDOM_SEED, SPEED_MULTIPLIERS, SPECIES_CONFIG
 from species.ant import Ant
 from species.spider import Spider
 from world.world import World
 
 # ---------------------------------------------------------------------------
-# Core ACTIVE_SPECIES Configuration
-# Linked dictionary mapping each active species class to its boolean "npc" flag.
-# If True (NPC), the species does not evolve and keeps its brain across generations.
-# {
-#    Ant: False,
-#    Spider: False,
-# }
+# Resolve SPECIES_CONFIG name strings → class objects
 # ---------------------------------------------------------------------------
-ACTIVE_SPECIES: dict[type, bool] = {
-    Ant: True,
-    Spider: False
+_SPECIES_CLASSES: dict[str, type] = {"Ant": Ant, "Spider": Spider}
+
+ACTIVE_SPECIES: dict[type, dict] = {
+    _SPECIES_CLASSES[name]: cfg
+    for name, cfg in SPECIES_CONFIG.items()
+    if cfg["active"]
 }
 
 
@@ -40,26 +37,27 @@ class Simulation:
     ----------
     rng : np.random.Generator or None
         Seeded random number generator.
-    active_species : dict[type, bool] or list[type] or None
-        Species configuration linking species classes to their npc boolean flag.
+    active_species : dict[type, dict] or list[type] or None
+        Species configuration mapping species classes to their config dicts.
         Defaults to ACTIVE_SPECIES.
     """
 
     def __init__(
         self,
         rng: np.random.Generator | None = None,
-        active_species: dict[type, bool] | list[type] | None = None,
+        active_species: dict[type, dict] | list[type] | None = None,
         load_path: str | None = None,
     ) -> None:
         self.rng: np.random.Generator = rng if rng is not None else np.random.default_rng(RANDOM_SEED)
         cfg = active_species if active_species is not None else ACTIVE_SPECIES
         if isinstance(cfg, dict):
             self.active_species: list[type] = list(cfg.keys())
-            self.npc_species: dict[type, bool] = dict(cfg)
+            self.species_config: dict[type, dict] = dict(cfg)
         else:
             self.active_species: list[type] = list(cfg)
-            self.npc_species: dict[type, bool] = {
-                cls: getattr(cls, "npc", False) for cls in self.active_species
+            self.species_config: dict[type, dict] = {
+                cls: SPECIES_CONFIG.get(getattr(cls, "species_name", cls.__name__), {})
+                for cls in self.active_species
             }
 
         for cls in self.active_species:
@@ -90,7 +88,8 @@ class Simulation:
 
     def is_npc(self, cls: type) -> bool:
         """Return True if species cls is configured as an NPC (non-evolving)."""
-        return bool(self.npc_species.get(cls, getattr(cls, "npc", False)))
+        cfg = self.species_config.get(cls, {})
+        return bool(cfg.get("npc", getattr(cls, "npc", False)))
 
     def save_top_brains(self) -> str | None:
         """Save top 10% brains of each active species to a JSON file in saves/ directory."""
@@ -251,29 +250,85 @@ class Simulation:
 
     def plot_fitness_curves(self) -> None:
         """Draw historical average fitness curves for all species in the terminal using plotext."""
+        can_plot = True
         try:
             import plotext as plt
         except ImportError:
             print("[WARN] plotext library not installed. Cannot display terminal plots.")
-            return
+            can_plot = False
 
-        if not self.history_time or len(self.history_time) < 2:
+        if can_plot and (not self.history_time or len(self.history_time) < 2):
             print("[INFO] Not enough simulation history recorded to plot fitness curves.")
-            return
+            can_plot = False
 
-        plt.clear_figure()
-        plt.title("Ants vs Spiders — Evolutionary Fitness Curves")
-        plt.xlabel("Simulation Time (seconds)")
-        plt.ylabel("Average Fitness Score")
+        if can_plot:
+            plt.clear_figure()
+            plt.title("Ants vs Spiders — Evolutionary Fitness Curves")
+            plt.xlabel("Simulation Time (seconds)")
+            plt.ylabel("Average Fitness Score")
 
-        colors = {"Ant": "green", "Spider": "red"}
-        for name, fitness_series in self.history_fitness.items():
-            color = colors.get(name, "blue")
-            plt.plot(self.history_time, fitness_series, label=f"{name} Avg Fitness", color=color)
+            colors = {"Ant": "green", "Spider": "red"}
+            for name, fitness_series in self.history_fitness.items():
+                color = colors.get(name, "blue")
+                plt.plot(self.history_time, fitness_series, label=f"{name} Avg Fitness", color=color)
 
-        plt.plotsize(100, 25)
+            plt.plotsize(100, 25)
+            print("\n" + "=" * 80)
+            print(" " * 25 + "SIMULATION FITNESS CURVES")
+            print("=" * 80)
+            plt.show()
+            print("=" * 80)
+
+        self._print_metric_recap()
+
+    def _print_metric_recap(self) -> None:
+        """Print end-of-simulation metric recap for each active species."""
+        from species.ant_constants import ANT_METRIC_BOUNDS
+        from species.spider_constants import SPIDER_METRIC_BOUNDS
+        from core.utils import SpeciesStats
+
+        recap_metrics = [
+            "survival_time",
+            "food_eaten",
+            "enemies_touched",
+            "times_eating_for_nothing",
+            "times_attacking_for_nothing",
+            "tiles_covered",
+        ]
+
         print("\n" + "=" * 80)
-        print(" " * 25 + "SIMULATION FITNESS CURVES")
+        print(" " * 26 + "SIMULATION METRIC RECAP")
         print("=" * 80)
-        plt.show()
-        print("=" * 80 + "\n")
+
+        for cls in self.active_species:
+            species_name = getattr(cls, "species_name", cls.__name__)
+            bounds_table = getattr(cls, "metrics", {})
+            if not bounds_table:
+                if species_name == "Ant":
+                    bounds_table = ANT_METRIC_BOUNDS
+                elif species_name == "Spider":
+                    bounds_table = SPIDER_METRIC_BOUNDS
+
+            peak_table = SpeciesStats.max_metrics.get(species_name, {})
+            all_creatures = self.world.creatures.get(cls, []) + self.world.dead_creatures.get(cls, [])
+
+            print(f"\n--- {species_name} Metric Recap ---")
+            print(f"  {'Metric':<29} | {'Max Value':>10} | {'Bound':>10} | Status")
+            print("  " + "-" * 62)
+            for metric_name in recap_metrics:
+                peak_val = peak_table.get(metric_name, 0.0)
+                curr_max = max((float(getattr(c, metric_name, 0.0)) for c in all_creatures), default=0.0)
+                val = max(peak_val, curr_max)
+                bound_val = float(bounds_table.get(metric_name, 0.0))
+
+                if metric_name == "survival_time" or val % 1 != 0:
+                    val_str = f"{val:.1f}"
+                else:
+                    val_str = f"{int(val)}"
+
+                bound_str = f"{bound_val:.0f}" if bound_val % 1 == 0 else f"{bound_val:.1f}"
+                warning = "⚠️" if val > bound_val else ""
+
+                print(f"  {metric_name:<29} | {val_str:>10} | {bound_str:>10} | {warning}")
+
+        print("\n" + "=" * 80 + "\n")

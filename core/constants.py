@@ -10,6 +10,35 @@ modules within the /species package.
 import math
 
 # ---------------------------------------------------------------------------
+# Continuous mode evolution parameters (threshold-based reproduction)
+# ---------------------------------------------------------------------------
+CONTINUOUS_MUTATION_RATE: float = 0.1
+CONTINUOUS_MUTATION_STRENGTH: float = 0.5
+CONTINUOUS_SELECTION_FRACTION: float = 0.1
+
+# ---------------------------------------------------------------------------
+# Generational mode evolution parameters (elitism, fixed-time episodes)
+# ---------------------------------------------------------------------------
+GENERATIONAL_MUTATION_RATE: float = 0.1
+GENERATIONAL_MUTATION_STRENGTH: float = 0.5
+EXTINCTION_MUTATION_RATE: float = GENERATIONAL_MUTATION_RATE + 0.3 # if the specie extincts
+EXTINCTION_MUTATION_STRENGTH: float = GENERATIONAL_MUTATION_STRENGTH + 0.5 # if the specie extincts
+GENERATIONAL_SELECTION_FRACTION: float = 0.2
+GENERATION_DURATION: float = 80.0               # seconds per generation
+
+# ---------------------------------------------------------------------------
+# Species configuration
+# SPECIES_CONFIG: dict[str, dict] = {
+#     "Ant":    {"active": True,  "reproduction_mode": "continuous",   "npc": False},
+#     "Spider": {"active": False, "reproduction_mode": "generational", "npc": False},
+# }
+# ---------------------------------------------------------------------------
+SPECIES_CONFIG: dict[str, dict] = {
+    "Ant":    {"active": True,  "reproduction_mode": "continuous",   "npc": True},
+    "Spider": {"active": True, "reproduction_mode": "generational", "npc": False},
+}
+
+# ---------------------------------------------------------------------------
 # World geometry
 # ---------------------------------------------------------------------------
 WORLD_WIDTH: int = 1000   # pixels
@@ -70,13 +99,6 @@ GENOME_SIZE: int = (
 )  # = 1468
 
 # ---------------------------------------------------------------------------
-# Genetic algorithm
-# ---------------------------------------------------------------------------
-MUTATION_RATE: float = 0.05            # probability each gene is mutated
-MUTATION_STRENGTH: float = 0.15        # std-dev of Gaussian noise added to genes
-SELECTION_FRACTION: float = 0.1       # top % survive to breed
-
-# ---------------------------------------------------------------------------
 # Rendering / UI
 # ---------------------------------------------------------------------------
 FPS: int = 60                         # target frames per second
@@ -97,4 +119,4 @@ SPEED_MULTIPLIERS: list[float] = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256]
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
-RANDOM_SEED: int = 42
+RANDOM_SEED: int = 41

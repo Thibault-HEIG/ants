@@ -10,7 +10,7 @@ from core.constants import SENSOR_ANGLE, WORLD_HEIGHT, WORLD_WIDTH
 # Population and Lifecycle
 SPIDER_COUNT: int = 5
 SPIDER_INITIAL_HEALTH: float = 300.0
-SPIDER_REPRODUCTION_THRESHOLD: float = 350.0
+SPIDER_REPRODUCTION_THRESHOLD: float = 600.0
 MAX_SPIDERS: int = 100
 
 # Physical and Combat Attributes
@@ -44,13 +44,13 @@ SPIDER_METRIC_BOUNDS: dict[str, float] = {
 # ---------------------------------------------------------------------------
 # Behavior
 FITNESS_SURVIVAL_WEIGHT: float = 0.0 # 0.0
-FITNESS_TILES_COVERED_WEIGHT: float = 50.0 # 10.0
+FITNESS_TILES_COVERED_WEIGHT: float = 10.0 # 10.0
 
 FITNESS_BRAIN_ORIGINALITY_WEIGHT: float = 0.05 # 0.05%
 
 # Performance
-FITNESS_FOOD_WEIGHT: float = 50.0 # 20.0
-FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT: float = -30.0 # -10.0
+FITNESS_FOOD_WEIGHT: float = 30.0 # 20.0
+FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT: float = -10.0 # -10.0
 
-FITNESS_ENEMIES_TOUCHED_WEIGHT: float = -50.0 # 50.0
-FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -50.0 # 0.0 So they attack more.
+FITNESS_ENEMIES_TOUCHED_WEIGHT: float = 50.0 # 50.0
+FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT: float = -5.0 # 0.0 So they attack more.

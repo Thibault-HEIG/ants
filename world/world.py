@@ -18,6 +18,15 @@ from core.constants import (
     WORLD_HEIGHT,
     MAX_FOOD,
     ZONE_BOUNDARY_X,
+    SPECIES_CONFIG,
+    CONTINUOUS_MUTATION_RATE,
+    CONTINUOUS_MUTATION_STRENGTH,
+    GENERATIONAL_MUTATION_RATE,
+    GENERATIONAL_MUTATION_STRENGTH,
+    GENERATIONAL_SELECTION_FRACTION,
+    EXTINCTION_MUTATION_RATE,
+    EXTINCTION_MUTATION_STRENGTH,
+    GENERATION_DURATION,
 )
 from core.utils import SpeciesStats
 from evolution.genetics import mutate, select_parents
@@ -45,7 +54,7 @@ class World:
     def __init__(
         self,
         rng: np.random.Generator,
-        active_species: dict[type, bool] | list[type] | None = None,
+        active_species: dict[type, dict] | list[type] | None = None,
     ) -> None:
         SpeciesStats.reset()
         self.width: int = WORLD_WIDTH
@@ -60,11 +69,12 @@ class World:
 
         if isinstance(cfg, dict):
             self.active_species: list[type] = list(cfg.keys())
-            self.npc_species: dict[type, bool] = dict(cfg)
+            self.species_config: dict[type, dict] = dict(cfg)
         else:
             self.active_species: list[type] = list(cfg)
-            self.npc_species: dict[type, bool] = {
-                cls: getattr(cls, "npc", False) for cls in self.active_species
+            self.species_config: dict[type, dict] = {
+                cls: SPECIES_CONFIG.get(getattr(cls, "species_name", cls.__name__), {})
+                for cls in self.active_species
             }
 
         for cls in self.active_species:
@@ -76,6 +86,10 @@ class World:
         self.all_time_counts: dict[type, int] = {cls: 0 for cls in self.active_species}
         self.repro_timers: dict[type, float] = {cls: 0.0 for cls in self.active_species}
         self._parent_alternate_state: dict[type, bool] = {cls: False for cls in self.active_species}
+
+        # Generational mode tracking
+        self.generation_timers: dict[type, float] = {cls: 0.0 for cls in self.active_species}
+        self.generation_counts: dict[type, int] = {cls: 0 for cls in self.active_species}
 
         self.food_items: list[Food] = []
         self.spatial_hash: SpatialHash = SpatialHash(cell_size=100.0)
@@ -107,9 +121,14 @@ class World:
         # Kick-start with an initial food source so creatures have something to eat
         self.environment.source_cooldown = 0.0  # allow immediate first source
 
+    def _get_repro_mode(self, cls: type) -> str:
+        """Return reproduction mode for species cls ('continuous' or 'generational')."""
+        return self.species_config.get(cls, {}).get("reproduction_mode", "continuous")
+
     def is_npc(self, cls: type) -> bool:
         """Return True if species cls is configured as an NPC (does not evolve)."""
-        return bool(self.npc_species.get(cls, getattr(cls, "npc", False)))
+        cfg = self.species_config.get(cls, {})
+        return bool(cfg.get("npc", getattr(cls, "npc", False)))
 
     # ------------------------------------------------------------------
     # Convenience accessors
@@ -228,55 +247,138 @@ class World:
         for cls in list(self.creatures.keys()):
             newly_dead = [c for c in self.creatures[cls] if not getattr(c, "alive", False)]
             self.dead_creatures[cls].extend(newly_dead)
-            if len(self.dead_creatures[cls]) > 100:
+            # Cap dead pool for continuous species only (generational clears each gen)
+            if self._get_repro_mode(cls) == "continuous" and len(self.dead_creatures[cls]) > 100:
                 self.dead_creatures[cls].sort(key=lambda c: c.compute_fitness(), reverse=True)
                 self.dead_creatures[cls] = self.dead_creatures[cls][:100]
             self.creatures[cls] = [c for c in self.creatures[cls] if getattr(c, "alive", False)]
 
         self.food_items = [f for f in self.food_items if not getattr(f, "consumed", False)]
 
-        # Phase 5.5: Continuous Fitness-Based Reproduction & Extinction Recovery
+        # Phase 5.5: Reproduction — branched by mode
         for cls in self.active_species:
-            pop = self.creatures[cls]
-            max_pop = getattr(cls, "max_population", 100)
-            threshold = getattr(cls, "reproduction_threshold", 200.0)
-            available = max_pop - len(pop)
-
-            if len(pop) == 0:
-                # Extinction recovery: repopulate starter batch from fittest dead ancestors (or fresh)
-                dead_pool = self.dead_creatures.get(cls, [])
-                init_count = getattr(cls, "initial_count", 10)
-                if dead_pool:
-                    from evolution.genetics import create_offspring_batch
-                    new_genomes = create_offspring_batch(
-                        dead_pool, init_count, self.rng, npc=self.is_npc(cls)
-                    )
-                    self._spawn_species(cls, new_genomes)
-                    self.dead_creatures[cls].clear()
-                else:
-                    self._spawn_species(cls)
-                self.repro_timers[cls] = 0.0
-            elif available > 0 and len(pop) >= 1:
-                self.repro_timers[cls] += dt * available
-                while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
-                    self.repro_timers[cls] -= threshold
-                    parent = self._select_parent(self.creatures[cls], cls)
-                    kingdom = self.kingdoms.get(cls)
-                    if kingdom is not None:
-                        child_pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
-                    else:
-                        offset = self.rng.uniform(-5.0, 5.0, size=2)
-                        child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
-                    child = cls(child_pos, self.rng)
-                    if self.is_npc(cls):
-                        child.genome = parent.genome.copy()
-                    else:
-                        child.genome = mutate(parent.genome, self.rng)
-                    child.world = self
-                    self.creatures[cls].append(child)
-                    self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
+            if self._get_repro_mode(cls) == "generational":
+                self._update_generational(cls, dt)
             else:
-                self.repro_timers[cls] = 0.0
+                self._update_continuous(cls, dt)
+
+    # ------------------------------------------------------------------
+    # Continuous reproduction (existing threshold-based logic)
+    # ------------------------------------------------------------------
+
+    def _update_continuous(self, cls: type, dt: float) -> None:
+        """Threshold-based reproduction with extinction recovery for continuous-mode species."""
+        pop = self.creatures[cls]
+        max_pop = getattr(cls, "max_population", 100)
+        threshold = getattr(cls, "reproduction_threshold", 200.0)
+        available = max_pop - len(pop)
+
+        if len(pop) == 0:
+            # Extinction recovery: repopulate from fittest dead ancestors (or fresh)
+            dead_pool = self.dead_creatures.get(cls, [])
+            init_count = getattr(cls, "initial_count", 10)
+            if dead_pool:
+                from evolution.genetics import create_offspring_batch
+                new_genomes = create_offspring_batch(
+                    dead_pool, init_count, self.rng, npc=self.is_npc(cls)
+                )
+                self._spawn_species(cls, new_genomes)
+                self.dead_creatures[cls].clear()
+            else:
+                self._spawn_species(cls)
+            self.repro_timers[cls] = 0.0
+        elif available > 0 and len(pop) >= 1:
+            self.repro_timers[cls] += dt * available
+            while self.repro_timers[cls] >= threshold and len(self.creatures[cls]) < max_pop:
+                self.repro_timers[cls] -= threshold
+                parent = self._select_parent(self.creatures[cls], cls)
+                kingdom = self.kingdoms.get(cls)
+                if kingdom is not None:
+                    child_pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
+                else:
+                    offset = self.rng.uniform(-5.0, 5.0, size=2)
+                    child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
+                child = cls(child_pos, self.rng)
+                if self.is_npc(cls):
+                    child.genome = parent.genome.copy()
+                else:
+                    child.genome = mutate(parent.genome, self.rng,
+                                          mutation_rate=CONTINUOUS_MUTATION_RATE,
+                                          mutation_strength=CONTINUOUS_MUTATION_STRENGTH)
+                child.world = self
+                self.creatures[cls].append(child)
+                self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
+        else:
+            self.repro_timers[cls] = 0.0
+
+    # ------------------------------------------------------------------
+    # Generational reproduction (elitism + fixed-time episodes)
+    # ------------------------------------------------------------------
+
+    def _update_generational(self, cls: type, dt: float) -> None:
+        """Advance generation timer and trigger end-of-generation if due."""
+        self.generation_timers[cls] += dt
+        pop = self.creatures[cls]
+        if self.generation_timers[cls] >= GENERATION_DURATION or len(pop) == 0:
+            self._end_generation(cls)
+
+    def _end_generation(self, cls: type) -> None:
+        """End current generation: rank, select elites, refill population."""
+        from evolution.brain import Brain
+
+        init_count = getattr(cls, "initial_count", 10)
+        npc = self.is_npc(cls)
+        kingdom = self.kingdoms.get(cls)
+
+        # Build fitness-ranked pool from living + dead (all count)
+        pool = list(self.creatures.get(cls, [])) + list(self.dead_creatures.get(cls, []))
+        pool.sort(key=lambda c: c.compute_fitness(), reverse=True)
+
+        if not pool:
+            # Total extinction with no dead pool — first-gen edge case
+            genomes = [
+                mutate(Brain(self.rng).get_genome(), self.rng,
+                       mutation_rate=EXTINCTION_MUTATION_RATE,
+                       mutation_strength=EXTINCTION_MUTATION_STRENGTH)
+                for _ in range(init_count)
+            ]
+        else:
+            # Select elites
+            elites_count = max(1, int(len(pool) * GENERATIONAL_SELECTION_FRACTION))
+            elite_genomes = [pool[i].genome.copy() for i in range(min(elites_count, len(pool)))]
+            elites_count = len(elite_genomes)  # clamp if pool smaller than expected
+            children_count = init_count - elites_count
+
+            # Elite genomes carried over unmutated
+            genomes = list(elite_genomes)
+
+            # Fill remaining slots with mutated children of elites (or exact copies if npc)
+            for i in range(children_count):
+                parent_genome = elite_genomes[i % elites_count]
+                if npc:
+                    genomes.append(parent_genome.copy())
+                else:
+                    genomes.append(mutate(parent_genome, self.rng,
+                                          mutation_rate=GENERATIONAL_MUTATION_RATE,
+                                          mutation_strength=GENERATIONAL_MUTATION_STRENGTH))
+
+        # Respawn full population as fresh creatures at kingdom
+        self.creatures[cls] = []
+        for i, genome in enumerate(genomes):
+            if kingdom is not None:
+                pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
+            else:
+                pos = self.rng.uniform([50, 50], [self.width - 50, self.height - 50])
+            creature = cls(pos, self.rng)
+            creature.genome = genome
+            creature.world = self
+            self.creatures[cls].append(creature)
+            self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
+
+        # Reset generation state — do NOT touch food, pheromones, lakes, or other species
+        self.dead_creatures[cls].clear()
+        self.generation_timers[cls] = 0.0
+        self.generation_counts[cls] += 1
 
     def _select_parent(self, creatures: list[Any], cls: type | None = None) -> Any:
         """Select a parent alternating 1/2 best individual, 1/2 random from top 20% best parents."""

@@ -61,10 +61,6 @@ def main() -> None:
                     simulation.ultra_mode = not getattr(simulation, "ultra_mode", False)
                 elif event.key == pygame.K_w or event.key == pygame.K_b:
                     renderer.toggle_window_b()
-                elif event.key == pygame.K_r:
-                    # Reset simulation world and spawn initial populations or reload save
-                    simulation.reset()
-                    renderer.chart.reset()
                 elif event.key == pygame.K_p:
                     # Save top 10% brains to JSON file
                     simulation.save_top_brains()

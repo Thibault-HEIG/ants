@@ -17,6 +17,7 @@ from core.constants import (
     HUD_BG_COLOR,
     HUD_ACCENT_COLOR,
     SPIDER_ACCENT_COLOR,
+    GENERATION_DURATION,
 )
 from core.utils import SpeciesStats
 
@@ -104,9 +105,11 @@ def draw_hud_panel(
 ) -> None:
     """Draw clean floating HUD panels: Top Left (Current Stats) and Top Right (History Stats)."""
     # 1. Top Left Panel: Current Stats
+    generation = int(round_time / GENERATION_DURATION) + 1
     left_lines: list[tuple[str, tuple[int, int, int]]] = [
         ("CURRENT STATS", (0, 220, 230)),
         (f"Sim Time    : {round_time:.1f}s", HUD_TEXT_COLOR),
+        (f"Generation  : {generation}", HUD_TEXT_COLOR),
         (f"Sim Speed   : {sim_speed}x", HUD_TEXT_COLOR),
         (f"FPS         : {fps:.0f}", HUD_TEXT_COLOR),
         (f"Sensors [S] : {'ON' if show_sensors else 'OFF'}", (150, 255, 150) if show_sensors else (180, 180, 180)),
@@ -388,9 +391,11 @@ def draw_window_b_panel(
     ab = ant_m.get("metric_bounds", {})
     sb = spider_m.get("metric_bounds", {})
 
+    generation = int(world.round_time / GENERATION_DURATION) + 1
+
     top_lines: list[tuple[str, tuple[int, int, int]]] = [
         ("=== ECOSYSTEM STATS & EVOLUTION MONITOR ===", (0, 220, 230)),
-        (f"Time: {world.round_time:.1f}s | Speed: {sim_speed}x | Ultra Mode [U]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
+        (f"Time: {world.round_time:.1f}s | Gen: {generation} | Speed: {sim_speed}x | Ultra [U]: {'ON' if ultra_mode else 'OFF'}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
         (f"[ANT STATS]      Alive: {ant_m['alive']}/{ant_m['max_pop']} (All-Time: {ant_m['all_time_count']})", HUD_ACCENT_COLOR),
         (f"  Fitness        Best: {ant_m['best_fitness']:6.1f} | Avg: {ant_m['avg_fitness']:6.1f}", HUD_TEXT_COLOR),
@@ -411,8 +416,8 @@ def draw_window_b_panel(
         (f"  Surv: {_format_bound_pair(*sb.get('survival_time', (0, 150)), True):>9} | Food   : {_format_bound_pair(*sb.get('food_eaten', (0, 30))):>7} | Touch: {_format_bound_pair(*sb.get('enemies_touched', (0, 50))):>7}", HUD_TEXT_COLOR),
         (f"  Tiles: {_format_bound_pair(*sb.get('tiles_covered', (0, 300))):>8} | Eat/Nth: {_format_bound_pair(*sb.get('times_eating_for_nothing', (0, 50))):>7} | Atk/Nth: {_format_bound_pair(*sb.get('times_attacking_for_nothing', (0, 50))):>5}", HUD_TEXT_COLOR),
         ("---------------------------------------------------------", (60, 75, 90)),
-        ("[KEYS] [U] Ultra Mode  [SPACE] Pause  [R] Reset  [P] Save", (210, 215, 225)),
-        ("       [S] Sensors     [F] Plot     [1-8] Spd  [W] WinB", (210, 215, 225)),
+        ("[KEYS] [U] Ultra Mode  [SPACE] Pause  [P] Save", (210, 215, 225)),
+        ("       [S] Sensors     [F] Plot    [1-8] Spd  [W] WinB", (210, 215, 225)),
     ]
 
     _draw_floating_box(surface, _stats_font, top_lines, pos_x=14, pos_y=12, align_right=False, border_color=(0, 173, 181, 180))
