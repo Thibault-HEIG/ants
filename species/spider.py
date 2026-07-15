@@ -88,8 +88,12 @@ class Spider(Creature):
         """Spiders always move at their normal max speed across all zones."""
         return self._max_speed
 
-    def compute_fitness(self) -> float:
-        """Calculate this ant's fitness score using normalized metrics and brain originality."""
+    def compute_fitness(self, force: bool = False) -> float:
+        """Calculate this spider's fitness score using normalized metrics and brain originality."""
+        cached = self._check_cached_fitness(force=force)
+        if cached is not None:
+            return cached
+
         self.brain_originality = self.compute_brain_originality()
         
         # Food
@@ -107,4 +111,5 @@ class Spider(Creature):
         # Total fitness
         total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + survival_time + tiles_covered)
         
-        return total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        return self._store_cached_fitness(result)

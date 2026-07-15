@@ -399,29 +399,29 @@ class Sensors:
             food_targets: list[tuple[float, float, float]] = []
             enemy_targets: list[tuple[float, float, float, bool, bool]] = []
             ally_targets: list[tuple[float, float, float, bool, bool]] = []
-
-            enemy_ids = set(id(e) for e in enemies)
-            ally_ids = set(id(a) for a in allies)
+            
+            my_species = type(allies[0]) if allies else None
 
             for n in nearby:
-                nid = id(n)
                 px = float(n.position[0])
                 py = float(n.position[1])
-
-                if hasattr(n, 'consumed'):
-                    # It's a food entity
+                
+                # Is it food?
+                if hasattr(n, "consumed"):
                     if not n.consumed:
                         food_targets.append((px, py, float(n.radius)))
-                elif nid in enemy_ids:
-                    if getattr(n, 'alive', True):
-                        enemy_targets.append((px, py, float(n.radius), bool(getattr(n, 'is_eating', False)), bool(getattr(n, 'is_attacking', False))))
-                elif nid in ally_ids:
-                    if getattr(n, 'alive', True):
-                        # Exclude self
-                        ddx = px - ox
-                        ddy = py - oy
-                        if ddx * ddx + ddy * ddy > 0.01:
-                            ally_targets.append((px, py, float(n.radius), bool(getattr(n, 'is_eating', False)), bool(getattr(n, 'is_attacking', False))))
+            
+                # Is it a creature?
+                elif n.alive:
+                    # Is it my species?
+                    if type(n) is my_species:
+                        distance = math.hypot(px - ox, py - oy)
+                        if distance > 0.1:  # Exclude self
+                            ally_targets.append((px, py, float(n.radius), n.is_eating, n.is_attacking))
+                    # It must be an enemy
+                    else:
+                        enemy_targets.append((px, py, float(n.radius), n.is_eating, n.is_attacking))
+            
         else:
             # Fallback: full-list mode (no spatial hash available)
             food_targets = [

@@ -33,9 +33,9 @@ DENSITY_RADIUS_SPIDER: float = SPIDER_SENSOR_RANGE
 SPIDER_METRIC_BOUNDS: dict[str, float] = {
     "survival_time": GENERATION_DURATION, # generation: GENERATION_DURATION - max: 500.0
     "computed_food_eaten": 20.0,
-    "computed_enemies_touched": 60.0,
-    "times_eating_for_nothing": 30.0,
-    "times_attacking_for_nothing": 120.0,
+    "computed_enemies_touched": 70.0,
+    "times_eating_for_nothing": 50.0,
+    "times_attacking_for_nothing": 200.0,
     "tiles_covered": (WORLD_HEIGHT * WORLD_WIDTH) / 900, # Realitic coverage is 1/900
 }
 

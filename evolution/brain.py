@@ -31,6 +31,7 @@ class Brain:
             output_size=NN_OUTPUTS,
             rng=rng,
         )
+        self._cached_genome: np.ndarray | None = None
 
     # ------------------------------------------------------------------
     # Properties delegating to underlying network
@@ -43,6 +44,7 @@ class Brain:
     @weights_input_hidden1.setter
     def weights_input_hidden1(self, val: np.ndarray) -> None:
         self.net.weights_input_hidden1 = val
+        self._cached_genome = None
 
     @property
     def bias_hidden1(self) -> np.ndarray:
@@ -51,6 +53,7 @@ class Brain:
     @bias_hidden1.setter
     def bias_hidden1(self, val: np.ndarray) -> None:
         self.net.bias_hidden1 = val
+        self._cached_genome = None
 
     @property
     def weights_hidden1_hidden2(self) -> np.ndarray:
@@ -59,6 +62,7 @@ class Brain:
     @weights_hidden1_hidden2.setter
     def weights_hidden1_hidden2(self, val: np.ndarray) -> None:
         self.net.weights_hidden1_hidden2 = val
+        self._cached_genome = None
 
     @property
     def bias_hidden2(self) -> np.ndarray:
@@ -67,6 +71,7 @@ class Brain:
     @bias_hidden2.setter
     def bias_hidden2(self, val: np.ndarray) -> None:
         self.net.bias_hidden2 = val
+        self._cached_genome = None
 
     @property
     def weights_hidden2_output(self) -> np.ndarray:
@@ -75,6 +80,7 @@ class Brain:
     @weights_hidden2_output.setter
     def weights_hidden2_output(self, val: np.ndarray) -> None:
         self.net.weights_hidden2_output = val
+        self._cached_genome = None
 
     @property
     def bias_output(self) -> np.ndarray:
@@ -83,6 +89,7 @@ class Brain:
     @bias_output.setter
     def bias_output(self, val: np.ndarray) -> None:
         self.net.bias_output = val
+        self._cached_genome = None
 
     # ------------------------------------------------------------------
     # Forward pass
@@ -121,14 +128,16 @@ class Brain:
 
     def get_genome(self) -> np.ndarray:
         """Flatten all weights and biases into a single 1-D vector (size 1468)."""
-        return np.concatenate([
-            self.weights_input_hidden1.flatten(),
-            self.bias_hidden1.flatten(),
-            self.weights_hidden1_hidden2.flatten(),
-            self.bias_hidden2.flatten(),
-            self.weights_hidden2_output.flatten(),
-            self.bias_output.flatten(),
-        ])
+        if self._cached_genome is None:
+            self._cached_genome = np.concatenate([
+                self.weights_input_hidden1.flatten(),
+                self.bias_hidden1.flatten(),
+                self.weights_hidden1_hidden2.flatten(),
+                self.bias_hidden2.flatten(),
+                self.weights_hidden2_output.flatten(),
+                self.bias_output.flatten(),
+            ])
+        return self._cached_genome
 
     def set_genome(self, genome: np.ndarray) -> None:
         """Reconstruct all weight matrices from a flat genome vector."""
@@ -163,6 +172,7 @@ class Brain:
         idx += size_h2o
 
         self.bias_output = genome[idx:idx + NN_OUTPUTS].copy()
+        self._cached_genome = genome.copy()
 
     @classmethod
     def genome_size(cls) -> int:

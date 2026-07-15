@@ -116,8 +116,12 @@ class Ant(Creature):
             self._last_tile = (cx, cy)
             self._last_tile_strength = float(world.pheromone_grid[cx, cy])
     
-    def compute_fitness(self) -> float:
+    def compute_fitness(self, force: bool = False) -> float:
         """Calculate this ant's fitness score using normalized metrics and brain originality."""
+        cached = self._check_cached_fitness(force=force)
+        if cached is not None:
+            return cached
+
         self.brain_originality = self.compute_brain_originality()
         
         # Food
@@ -136,4 +140,5 @@ class Ant(Creature):
         # Total fitness
         total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered)
         
-        return total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        return self._store_cached_fitness(result)

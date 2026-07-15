@@ -82,6 +82,8 @@ class Creature(ABC):
         self.health: float = initial_health if initial_health is not None else self.initial_health
         self.max_health: float = self.health
         self.alive: bool = True
+        self._cached_fitness: float | None = None
+        self._last_fitness_calc_time: float = -999.0
 
         # --- Physical attributes ---
         self._max_speed: float = max_speed if max_speed is not None else self.max_speed
@@ -255,6 +257,7 @@ class Creature(ABC):
         if self.health <= 0:
             self.health = 0.0
             self.alive = False
+            self._cached_fitness = None
 
     def get_effective_max_speed(self, zone: float) -> float:
         """Return maximum speed, allowing subclass overrides based on world zones."""
@@ -281,6 +284,7 @@ class Creature(ABC):
         if self.health <= 0:
             self.health = 0.0
             self.alive = False
+            self._cached_fitness = None
 
     def _get_alive_conspecifics(self) -> list[Creature]:
         """Return the list of currently living creatures of the same species."""
@@ -303,28 +307,46 @@ class Creature(ABC):
         p = 0.3  # Concave mapping exponent
         return max(0.0, (float(value) / max_value) ** p)
 
-    def compute_brain_originality(self) -> float:
+    def compute_brain_originality(self, mean_genome: np.ndarray | None = None) -> float:
         """Calculate originality of this creature's brain relative to the living population mean.
 
         Returns a value in [0, 1] using a sigmoid mapping of the Euclidean norm
         magnitude distance between this creature's genome and the population mean genome.
         """
-        alive_pool = self._get_alive_conspecifics()
-        if len(alive_pool) <= 1:
-            return 0.0
+        if mean_genome is None:
+            world = getattr(self, "world", None)
+            if world is not None and hasattr(world, "mean_genomes") and type(self) in world.mean_genomes:
+                mean_genome = world.mean_genomes[type(self)]
 
-        genomes = [c.brain.get_genome() for c in alive_pool]
-        mean_genome = np.mean(genomes, axis=0)
+        if mean_genome is None:
+            alive_pool = self._get_alive_conspecifics()
+            if len(alive_pool) <= 1:
+                return 0.0
+            genomes = [c.brain.get_genome() for c in alive_pool]
+            mean_genome = np.mean(genomes, axis=0)
+
         my_genome = self.brain.get_genome()
-
         diff = my_genome - mean_genome
         dist = float(np.linalg.norm(diff))
         scaled_dist = dist / math.sqrt(len(diff)) if len(diff) > 0 else dist
 
         return float(2.0 / (1.0 + math.exp(-scaled_dist)) - 1.0)
 
+    def _check_cached_fitness(self, force: bool = False) -> float | None:
+        world = getattr(self, "world", None)
+        if not force and self._cached_fitness is not None and world is not None and (world.round_time - self._last_fitness_calc_time) < 0.5:
+            return self._cached_fitness
+        return None
+
+    def _store_cached_fitness(self, fitness: float) -> float:
+        world = getattr(self, "world", None)
+        self._cached_fitness = fitness
+        if world is not None:
+            self._last_fitness_calc_time = world.round_time
+        return fitness
+
     @abstractmethod
-    def compute_fitness(self) -> float:
+    def compute_fitness(self, force: bool = False) -> float:
         """Calculate this creature's fitness score. Must be implemented by species."""
         pass
 

@@ -25,7 +25,13 @@ def select_parents(
     if not creatures:
         return []
 
-    scored = [(c.compute_fitness(), c) for c in creatures]
+    scored = []
+    for c in creatures:
+        try:
+            fit = c.compute_fitness(force=True)
+        except TypeError:
+            fit = c.compute_fitness()
+        scored.append((fit, c))
     scored.sort(key=lambda pair: pair[0], reverse=True)
 
     parent_count = max(min(len(scored), 3), int(len(scored) * top_fraction))

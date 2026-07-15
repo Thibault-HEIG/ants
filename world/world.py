@@ -95,6 +95,8 @@ class World:
         self.spatial_hash: SpatialHash = SpatialHash(cell_size=100.0)
         self.environment: EnvironmentSystem = EnvironmentSystem(self)
         self.round_time: float = 0.0
+        self.mean_genomes: dict[type, np.ndarray | None] = {}
+        self._last_mean_genome_time: float = -999.0
 
         # Phase 2: Kingdoms
         self.kingdoms: dict[type, Kingdom] = {
@@ -211,6 +213,18 @@ class World:
             for cls, pop in self.creatures.items()
         }
 
+        # Calculate global mean genomes once per second (or when not populated)
+        if (self.round_time - self._last_mean_genome_time) >= 1.0 or not self.mean_genomes:
+            self._last_mean_genome_time = self.round_time
+            for cls, living in living_by_species.items():
+                if len(living) > 1:
+                    genomes = [c.brain.get_genome() for c in living]
+                    self.mean_genomes[cls] = np.mean(genomes, axis=0)
+                elif len(living) == 1:
+                    self.mean_genomes[cls] = living[0].brain.get_genome()
+                else:
+                    self.mean_genomes[cls] = None
+
         # Phase 1 & 2: Sensing and acting across all active species
         for cls, pop in self.creatures.items():
             allies = living_by_species.get(cls, [])
@@ -251,7 +265,7 @@ class World:
             self.dead_creatures[cls].extend(newly_dead)
             # Cap dead pool for continuous species only (generational clears each gen)
             if self._get_repro_mode(cls) == "continuous" and len(self.dead_creatures[cls]) > 100:
-                self.dead_creatures[cls].sort(key=lambda c: c.compute_fitness(), reverse=True)
+                self.dead_creatures[cls].sort(key=lambda c: c.compute_fitness(force=True), reverse=True)
                 self.dead_creatures[cls] = self.dead_creatures[cls][:100]
             self.creatures[cls] = [c for c in self.creatures[cls] if getattr(c, "alive", False)]
 
@@ -326,7 +340,7 @@ class World:
 
         # Build fitness-ranked pool from living + dead (all count)
         pool = list(self.creatures.get(cls, [])) + list(self.dead_creatures.get(cls, []))
-        pool.sort(key=lambda c: c.compute_fitness(), reverse=True)
+        pool.sort(key=lambda c: c.compute_fitness(force=True), reverse=True)
 
         if not pool:
             # Total extinction with no dead pool — first-gen edge case
@@ -382,7 +396,7 @@ class World:
         if not creatures:
             return None
 
-        scored = sorted(creatures, key=lambda c: c.compute_fitness(), reverse=True)
+        scored = sorted(creatures, key=lambda c: c.compute_fitness(force=True), reverse=True)
         use_best = not self._parent_alternate_state.get(cls, False)
         if cls is not None:
             self._parent_alternate_state[cls] = use_best
@@ -462,6 +476,7 @@ class World:
                         creature.genome = mutate(parent_genome, self.rng)
             self.creatures[cls].append(creature)
             self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
+        self._last_mean_genome_time = -999.0
 
     def reset_with_genomes(
         self,

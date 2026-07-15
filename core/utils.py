@@ -111,7 +111,11 @@ class SpeciesStats:
         """Record final stats of a creature upon death or generation completion for all-time averages."""
         species_name = getattr(creature, "species_name", getattr(type(creature), "species_name", type(creature).__name__))
         cls.total_dead_count[species_name] = cls.total_dead_count.get(species_name, 0) + 1
-        cls.sum_dead_fitness[species_name] = cls.sum_dead_fitness.get(species_name, 0.0) + float(creature.compute_fitness())
+        try:
+            fit = float(creature.compute_fitness(force=True))
+        except TypeError:
+            fit = float(creature.compute_fitness())
+        cls.sum_dead_fitness[species_name] = cls.sum_dead_fitness.get(species_name, 0.0) + fit
         cls.sum_dead_food[species_name] = cls.sum_dead_food.get(species_name, 0.0) + float(getattr(creature, "food_eaten", 0))
         cls.sum_dead_computed_food[species_name] = cls.sum_dead_computed_food.get(species_name, 0.0) + float(getattr(creature, "computed_food_eaten", 0.0))
         cls.sum_dead_enemies[species_name] = cls.sum_dead_enemies.get(species_name, 0.0) + float(getattr(creature, "enemies_touched", 0))
@@ -133,7 +137,10 @@ class SpeciesStats:
 
         # Track all-time peak fitness and computed scores
         try:
-            fit = float(creature.compute_fitness())
+            try:
+                fit = float(creature.compute_fitness(force=True))
+            except TypeError:
+                fit = float(creature.compute_fitness())
             if fit > cls.max_fitness.get(species_name, 0.0):
                 cls.max_fitness[species_name] = fit
         except Exception:

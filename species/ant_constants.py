@@ -38,8 +38,8 @@ ANT_METRIC_BOUNDS: dict[str, float] = {
     "survival_time": GENERATION_DURATION, # generation: GENERATION_DURATION - max: 300.0
     "computed_food_eaten": 30.0,
     "computed_enemies_touched": 30.0,
-    "times_eating_for_nothing": 50.0,
-    "times_attacking_for_nothing": 150.0,
+    "times_eating_for_nothing": 80.0,
+    "times_attacking_for_nothing": 200.0,
     "follow_pheromones": 100.0,
     "tiles_covered": (WORLD_HEIGHT * WORLD_WIDTH) / 900, # Realitic coverage is 1/900
 }
