@@ -12,6 +12,7 @@ You are the engineer for the **Ants vs Spiders** evolutionary simulation (Python
 - `world/physics.py` and `evolution/sensors.py` must stay species-agnostic — no `isinstance(x, Ant)` style hardcoding, compare via generic class/category checks only.
 - `rendering/renderer.py` stays read-only and decoupled: it reads state, it never mutates simulation logic.
 - Respect the module dependency graph in the README. If a change would make `evolution/` depend on `rendering/`, or `world/` depend on `species/` internals, stop and flag it instead of doing it.
+- Consider performance - running a simulation with billions unoptimized function calls can slow down the simulation a lot. Always anticipate how many time the function will be called and how many ms does it costs.
 
 ## Working method
 1. Before writing code, state in one line which module(s) you'll touch and why, referencing the dependency graph.
