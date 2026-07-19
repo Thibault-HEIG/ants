@@ -155,7 +155,7 @@ def resolve_food_collisions(
     # Pre-build set of food ids for fast membership test when using spatial hash
     food_ids: set[int] | None = None
     if spatial_hash is not None:
-        food_ids = set(id(f) for f in food_items if not getattr(f, "consumed", False))
+        food_ids = set(id(f) for f in food_items if not getattr(f, "consumed", False) and not getattr(f, "being_carried", False))
 
     for pop in creatures_by_species.values():
         for creature in pop:
@@ -181,7 +181,7 @@ def resolve_food_collisions(
             for food in candidates:
                 if spatial_hash is not None and food_ids is not None and id(food) not in food_ids:
                     continue
-                if getattr(food, "consumed", False):
+                if getattr(food, "consumed", False) or getattr(food, "being_carried", False):
                     continue
 
                 fx = float(food.position[0])
@@ -199,6 +199,64 @@ def resolve_food_collisions(
             # Reset eating state regardless of whether food was found
             creature.is_eating = False
             creature.eat_timer = 0.0
+
+
+def resolve_take_release(
+    creatures_by_species: dict[type, list[Any]],
+    food_items: list[Any],
+    kingdoms: dict[type, Any] | None = None,
+    spatial_hash: SpatialHash | None = None,
+) -> dict[type, int]:
+    """Resolve taking and releasing carried objects, returning count of successful home deliveries per species."""
+    delivered_counts: dict[type, int] = {cls: 0 for cls in creatures_by_species}
+    pickup_radius_sq = EAT_PICKUP_RADIUS * EAT_PICKUP_RADIUS
+
+    food_ids: set[int] | None = None
+    if spatial_hash is not None:
+        food_ids = set(id(f) for f in food_items if not getattr(f, "consumed", False) and not getattr(f, "being_carried", False))
+
+    for cls, pop in creatures_by_species.items():
+        kingdom = kingdoms.get(cls) if kingdoms else None
+        spawn_r_sq = (kingdom.spawn_radius * kingdom.spawn_radius) if kingdom else 0.0
+
+        for creature in pop:
+            if not getattr(creature, "alive", False):
+                continue
+
+            if getattr(creature, "release_signal", False) and creature.carried_object is not None:
+                at_home = False
+                if kingdom is not None:
+                    hx = kingdom.position[0] - creature.position[0]
+                    hy = kingdom.position[1] - creature.position[1]
+                    if hx * hx + hy * hy <= spawn_r_sq:
+                        at_home = True
+                if at_home:
+                    creature.carried_object.consumed = True
+                    delivered_counts[cls] = delivered_counts.get(cls, 0) + 1
+                creature.release_object(at_home)
+                
+            elif getattr(creature, "take_signal", False) and creature.carried_object is None:
+                if spatial_hash is not None:
+                    candidates = spatial_hash.query(creature.position, EAT_PICKUP_RADIUS + 10.0)
+                else:
+                    candidates = food_items
+
+                for food in candidates:
+                    if spatial_hash is not None and food_ids is not None and id(food) not in food_ids:
+                        continue
+                    if getattr(food, "consumed", False) or getattr(food, "being_carried", False):
+                        continue
+
+                    fx, fy = float(food.position[0]), float(food.position[1])
+                    dx = creature.position[0] - fx
+                    dy = creature.position[1] - fy
+                    if dx * dx + dy * dy < pickup_radius_sq:
+                        creature.take_object(food)
+                        if food_ids is not None:
+                            food_ids.discard(id(food))
+                        break
+
+    return delivered_counts
 
 
 def resolve_lake_collisions(

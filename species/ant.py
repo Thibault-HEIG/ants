@@ -39,6 +39,11 @@ from species.ant_constants import (
     FITNESS_FOLLOW_PHEROMONES_WEIGHT,
     FITNESS_TILES_COVERED_WEIGHT,
     FITNESS_BRAIN_ORIGINALITY_WEIGHT,
+    FITNESS_TAKEN_OBJECT_WEIGHT,
+    FITNESS_WALK_HOME_DIRECTION_WEIGHT,
+    FITNESS_WALK_OPPOSITE_HOME_WEIGHT,
+    FITNESS_RELEASE_ANYWHERE_WEIGHT,
+    FITNESS_RELEASE_AT_HOME_WEIGHT,
 )
 
 
@@ -136,9 +141,16 @@ class Ant(Creature):
         survival_time = self.normalize_metric("survival_time") * FITNESS_SURVIVAL_WEIGHT
         follow_pheromones = self.normalize_metric("follow_pheromones") * FITNESS_FOLLOW_PHEROMONES_WEIGHT
         tiles_covered = self.normalize_metric("tiles_covered") * FITNESS_TILES_COVERED_WEIGHT
+
+        # Carry-object
+        taken_object = self.normalize_metric("computed_taken_object") * FITNESS_TAKEN_OBJECT_WEIGHT
+        walk_home = self.normalize_metric("walk_with_object_in_home_direction") * FITNESS_WALK_HOME_DIRECTION_WEIGHT
+        walk_opposite = self.normalize_metric("walk_with_object_in_opposite_home_direction") * FITNESS_WALK_OPPOSITE_HOME_WEIGHT
+        release_anywhere = self.normalize_metric("computed_release_anywhere") * FITNESS_RELEASE_ANYWHERE_WEIGHT
+        release_at_home = self.normalize_metric("release_at_home_count") * FITNESS_RELEASE_AT_HOME_WEIGHT
         
         # Total fitness
-        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered)
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_home + walk_opposite + release_anywhere + release_at_home)
         
         result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
         return self._store_cached_fitness(result)

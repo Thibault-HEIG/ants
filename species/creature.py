@@ -21,6 +21,8 @@ from core.constants import (
     HEALTH_DECAY_RATE,
     MAX_AGE_NORMALIZATION,
     ZONE_BOUNDARY_X,
+    CARRY_SPEED_MULTIPLIER,
+    EAT_PICKUP_RADIUS,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -131,6 +133,18 @@ class Creature(ABC):
         self._hp_snapshot: float = self.health
         self._hp_timer: float = 0.0
         self._has_gained_hp: bool = False
+
+        # --- Carry state ---
+        self.carried_object: Any | None = None
+        self.computed_taken_object: float = 0.0
+        self.walk_with_object_in_home_direction: float = 0.0
+        self.walk_with_object_in_opposite_home_direction: float = 0.0
+        self.computed_release_anywhere: float = 0.0
+        self.release_at_home_count: int = 0
+        self._prev_home_distance: float | None = None
+        self.take_signal: bool = False
+        self.release_signal: bool = False
+
         self.record_current_tile()
 
     def record_current_tile(self, world_obj: Any | None = None) -> None:
@@ -191,6 +205,9 @@ class Creature(ABC):
         hp_normalized = self.health / self.max_health
         zone = 1.0 if self.position[0] >= ZONE_BOUNDARY_X else 0.0
         effective_max_speed = self.get_effective_max_speed(zone)
+        is_carrying = self.carried_object is not None
+        if is_carrying:
+            effective_max_speed *= CARRY_SPEED_MULTIPLIER
         speed_normalized = self.speed / effective_max_speed if effective_max_speed > 0 else 0.0
         age_normalized = min(1.0, self.survival_time / MAX_AGE_NORMALIZATION) if MAX_AGE_NORMALIZATION > 0 else 0.0
 
@@ -201,6 +218,42 @@ class Creature(ABC):
             cy = int(clamp(self.position[1] / getattr(world, "pheromone_cell_size", 10.0), 0.0, float(gh - 1)))
             sensor_data.pheromone_strength = float(world.pheromone_grid[cx, cy])
 
+        # --- Carry-related sensor inputs ---
+        sensor_data.is_carrying = 1.0 if is_carrying else 0.0
+
+        # can_eat / can_touch: check food within EAT_PICKUP_RADIUS (reuse targets from perceive)
+        food_nearby = False
+        pickup_r_sq = EAT_PICKUP_RADIUS * EAT_PICKUP_RADIUS
+        _ox, _oy = float(self.position[0]), float(self.position[1])
+        for ft in getattr(sensor_data, '_food_targets', []):
+            dx_f = ft[0] - _ox
+            dy_f = ft[1] - _oy
+            if dx_f * dx_f + dy_f * dy_f < pickup_r_sq:
+                food_nearby = True
+                break
+        sensor_data.can_eat = 1.0 if food_nearby else 0.0
+        sensor_data.can_touch = 1.0 if food_nearby else 0.0
+        sensor_data.can_take = 1.0 if (food_nearby and not is_carrying) else 0.0
+
+        # Home-related sensor inputs
+        home_dist_val = 0.0
+        home_angle_val = 0.0
+        is_at_home_val = 0.0
+        if world is not None and hasattr(world, 'kingdoms'):
+            kingdom = world.kingdoms.get(type(self))
+            if kingdom is not None:
+                hx = kingdom.position[0] - self.position[0]
+                hy = kingdom.position[1] - self.position[1]
+                dist_to_home = math.sqrt(hx * hx + hy * hy)
+                max_home_dist = math.sqrt(float(WORLD_WIDTH) ** 2 + float(WORLD_HEIGHT) ** 2)
+                home_dist_val = max(0.0, 1.0 - dist_to_home / max_home_dist)
+                angle_to_home = math.atan2(hy, hx)
+                home_angle_val = normalize_angle(angle_to_home - self.direction) / math.pi
+                is_at_home_val = 1.0 if dist_to_home <= kingdom.spawn_radius else 0.0
+        sensor_data.home_distance = home_dist_val
+        sensor_data.home_angle = home_angle_val
+        sensor_data.is_at_home = is_at_home_val
+
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 
         brain_output = self.brain.forward(inputs)
@@ -208,13 +261,41 @@ class Creature(ABC):
         speed_signal = brain_output[1]
         attack_signal = brain_output[2]
         eat_signal = brain_output[3]
+        take_signal = brain_output[4]
+        release_signal = brain_output[5]
 
-        # --- Eating state machine ---
-        if self.is_eating:
+        # --- Action state machine (priority: attack > eat > take > release) ---
+        # While carrying: can't attack, eat, or take. Can only move + release.
+        if is_carrying:
+            self.is_attacking = False
+            self.is_eating = False
+            self.eat_timer = 0.0
+            self.take_signal = False
+            self.release_signal = bool(release_signal > 0.5)
+
+            # Movement (reduced speed already applied via CARRY_SPEED_MULTIPLIER)
+            self.direction += turn_signal * self._turn_rate * dt
+            self.direction = normalize_angle(self.direction)
+
+            self.speed = speed_signal * effective_max_speed
+            dx = math.cos(self.direction) * self.speed * dt
+            dy = math.sin(self.direction) * self.speed * dt
+            old_x, old_y = self.position[0], self.position[1]
+            self.position[0] += dx
+            self.position[1] += dy
+
+            self.position[0] = clamp(self.position[0], 0.0, float(WORLD_WIDTH))
+            self.position[1] = clamp(self.position[1], 0.0, float(WORLD_HEIGHT))
+            self.distance_walked += math.sqrt(
+                (self.position[0] - old_x) ** 2 + (self.position[1] - old_y) ** 2
+            )
+        elif self.is_eating:
             # Frozen while eating — no movement, no turning, no attacking
             self.eat_timer -= dt
             self.speed = 0.0
             self.is_attacking = False
+            self.take_signal = False
+            self.release_signal = False
             # eat_timer expiry is handled by physics.resolve_food_collisions
         else:
             # Check if creature wants to start eating
@@ -223,9 +304,13 @@ class Creature(ABC):
                 self.eat_timer = self.eating_time
                 self.speed = 0.0
                 self.is_attacking = False
+                self.take_signal = False
+                self.release_signal = False
             else:
                 # Normal movement and combat
                 self.is_attacking = bool(attack_signal > 0.5)
+                self.take_signal = bool(take_signal > 0.5)
+                self.release_signal = False  # nothing to release
 
                 self.direction += turn_signal * self._turn_rate * dt
                 self.direction = normalize_angle(self.direction)
@@ -243,6 +328,27 @@ class Creature(ABC):
                     (self.position[0] - old_x) ** 2 + (self.position[1] - old_y) ** 2
                 )
 
+        # --- Home-distance tracking while carrying ---
+        if is_carrying:
+            if world is not None and hasattr(world, 'kingdoms'):
+                kingdom = world.kingdoms.get(type(self))
+                if kingdom is not None:
+                    hx = kingdom.position[0] - self.position[0]
+                    hy = kingdom.position[1] - self.position[1]
+                    current_home_dist = math.sqrt(hx * hx + hy * hy)
+                    if self._prev_home_distance is not None:
+                        delta = self._prev_home_distance - current_home_dist
+                        if delta > 0:
+                            self.walk_with_object_in_home_direction += delta
+                        elif delta < 0:
+                            self.walk_with_object_in_opposite_home_direction += abs(delta)
+                    self._prev_home_distance = current_home_dist
+            # Sync carried object position
+            self.carried_object.position[0] = self.position[0]
+            self.carried_object.position[1] = self.position[1]
+        else:
+            self._prev_home_distance = None
+
         # --- Health decay (always applies, even while eating) ---
         self.health -= HEALTH_DECAY_RATE * dt
         if self.is_attacking:
@@ -258,6 +364,9 @@ class Creature(ABC):
             self.health = 0.0
             self.alive = False
             self._cached_fitness = None
+            if self.carried_object is not None:
+                self.carried_object.being_carried = False
+                self.carried_object = None
 
     def get_effective_max_speed(self, zone: float) -> float:
         """Return maximum speed, allowing subclass overrides based on world zones."""
@@ -266,7 +375,7 @@ class Creature(ABC):
     def eat(self, food_value: float) -> None:
         """Consume food and restore health up to maximum health, updating raw and computed food scores."""
         hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
-        computed_increment = 0.75 / (0.5 + math.sqrt(hp_pct)) # score between 0.5 and 1.5
+        computed_increment = 3.0 - 4.0 * hp_pct  # score between -1.0 and 3.0 (avg 1.0)
         self.health = min(self.health + food_value, self.max_health)
         self.food_eaten += 1
         self.computed_food_eaten += computed_increment
@@ -278,6 +387,34 @@ class Creature(ABC):
         self.enemies_touched += 1
         self.computed_enemies_touched += computed_increment
 
+    def take_object(self, obj: Any) -> None:
+        """Pick up an object (currently food only), using HP-weighted scoring like touch_enemy."""
+        hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
+        computed_increment = 0.5 + hp_pct  # score between 0.5 and 1.5
+        self.carried_object = obj
+        self.computed_taken_object += computed_increment
+        obj.being_carried = True
+        # Initialize home-distance tracking reference point
+        if self.world is not None and hasattr(self.world, 'kingdoms'):
+            kingdom = self.world.kingdoms.get(type(self))
+            if kingdom is not None:
+                hx = kingdom.position[0] - self.position[0]
+                hy = kingdom.position[1] - self.position[1]
+                self._prev_home_distance = math.sqrt(hx * hx + hy * hy)
+
+    def release_object(self, at_home: bool) -> None:
+        """Release the carried object; tracks fitness event based on location."""
+        if self.carried_object is None:
+            return
+        if at_home:
+            self.release_at_home_count += 1
+        else:
+            hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
+            computed_increment = 0.5 + hp_pct
+            self.computed_release_anywhere += computed_increment
+        self.carried_object.being_carried = False
+        self.carried_object = None
+
     def take_damage(self, amount: float) -> None:
         """Receive damage from an enemy attack."""
         self.health -= amount
@@ -285,6 +422,9 @@ class Creature(ABC):
             self.health = 0.0
             self.alive = False
             self._cached_fitness = None
+            if self.carried_object is not None:
+                self.carried_object.being_carried = False
+                self.carried_object = None
 
     def _get_alive_conspecifics(self) -> list[Creature]:
         """Return the list of currently living creatures of the same species."""
@@ -305,6 +445,8 @@ class Creature(ABC):
         """Map self's metric_name value to [0, 1+] using self.metrics table and root curve."""
         """"1 is not the max, but a reference point for normalization. Values above 1 are possible."""
         p = 0.3  # Concave mapping exponent
+        if value <= 0.0 or max_value <= 0.0:
+            return 0.0
         return max(0.0, (float(value) / max_value) ** p)
 
     def compute_brain_originality(self, mean_genome: np.ndarray | None = None) -> float:
@@ -353,8 +495,9 @@ class Creature(ABC):
     def __repr__(self) -> str:
         status = "alive" if self.alive else "dead"
         eating = " [EATING]" if self.is_eating else ""
+        carrying = " [CARRYING]" if self.carried_object is not None else ""
         return (
-            f"{self.__class__.__name__}({status}{eating}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
+            f"{self.__class__.__name__}({status}{eating}{carrying}, pos=[{self.position[0]:.0f},{self.position[1]:.0f}], "
             f"hp={self.health:.1f}, food={self.food_eaten}({self.computed_food_eaten:.1f}), "
             f"touches={self.enemies_touched}({self.computed_enemies_touched:.1f}), tiles={self.tiles_covered})"
         )

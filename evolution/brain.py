@@ -100,17 +100,19 @@ class Brain:
 
         Parameters
         ----------
-        inputs : np.ndarray, shape (71,)
+        inputs : np.ndarray, shape (87,)
             Normalised sensor readings and internal state vector.
 
         Returns
         -------
-        np.ndarray, shape (4,)
-            [turn, speed_factor, attack_boolean, eat_boolean]
+        np.ndarray, shape (6,)
+            [turn, speed_factor, attack_boolean, eat_boolean, take_boolean, release_boolean]
             - turn ∈ [-1, 1]: negative = left, positive = right
             - speed_factor ∈ [0, 1]: 0 = stop, 1 = full speed
             - attack_boolean ∈ {0.0, 1.0}: 1.0 = attack, 0.0 = hold fire
             - eat_boolean ∈ {0.0, 1.0}: 1.0 = attempt to eat, 0.0 = don't eat
+            - take_boolean ∈ {0.0, 1.0}: 1.0 = attempt to take object, 0.0 = don't take
+            - release_boolean ∈ {0.0, 1.0}: 1.0 = attempt to release object, 0.0 = don't release
         """
         output = self.net.forward_raw(inputs)
 
@@ -119,6 +121,8 @@ class Brain:
             (output[1] + 1.0) / 2.0,          # speed: map [-1,1] → [0,1]
             1.0 if output[2] > 0.0 else 0.0,  # attack boolean
             1.0 if output[3] > 0.0 else 0.0,  # eat boolean
+            1.0 if output[4] > 0.0 else 0.0,  # take boolean
+            1.0 if output[5] > 0.0 else 0.0,  # release boolean
         ])
         return result
 

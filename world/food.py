@@ -44,6 +44,25 @@ def is_in_lake(pos: np.ndarray, radius: float, lakes: list[Any] | None = None) -
     return False
 
 
+def is_in_home(pos: np.ndarray, radius: float, kingdoms: Any = None) -> bool:
+    """Check if a circle at pos with given radius overlaps any kingdom (home) obstacle."""
+    if not kingdoms:
+        return False
+    px = float(pos[0])
+    py = float(pos[1])
+    items = kingdoms.values() if isinstance(kingdoms, dict) else kingdoms
+    for kingdom in items:
+        kx = float(kingdom.position[0])
+        ky = float(kingdom.position[1])
+        kradius = float(getattr(kingdom, "spawn_radius", 60.0))
+        dx = px - kx
+        dy = py - ky
+        min_dist = kradius + radius
+        if dx * dx + dy * dy < min_dist * min_dist:
+            return True
+    return False
+
+
 class Food(Entity):
     """Abstract base for consumable food items placed in the world.
 
@@ -61,6 +80,7 @@ class Food(Entity):
         super().__init__(position, radius=FOOD_RADIUS)
         self.nutrition_value: float = nutrition_value
         self.food_type: str = food_type
+        self.being_carried: bool = False
 
     def on_consume(self) -> float:
         """Mark as consumed and return nutritional value."""
@@ -68,7 +88,12 @@ class Food(Entity):
         return self.nutrition_value
 
     def __repr__(self) -> str:
-        status = "eaten" if self.consumed else "available"
+        if self.consumed:
+            status = "eaten"
+        elif self.being_carried:
+            status = "carried"
+        else:
+            status = "available"
         return f"{self.food_type}(pos=[{self.position[0]:.0f}, {self.position[1]:.0f}], {status})"
 
 
@@ -118,6 +143,7 @@ class FoodSource:
         dt: float,
         current_food_count: int,
         lakes: list[Any] | None = None,
+        kingdoms: Any = None,
     ) -> list[Food]:
         """Advance the source by one tick and return any newly spawned food.
 
@@ -129,6 +155,8 @@ class FoodSource:
             Current global food count (used to respect MAX_FOOD cap).
         lakes : list[Any] | None, optional
             Static lake obstacles to avoid when scattering food.
+        kingdoms : Any, optional
+            Species kingdoms (homes) to avoid when scattering food.
 
         Returns
         -------
@@ -145,14 +173,14 @@ class FoodSource:
         while self.spawn_timer >= 1.0 and (current_food_count + len(spawned)) < MAX_FOOD:
             self.spawn_timer -= 1.0
 
-            # Scatter position around the source centre, avoiding lakes
+            # Scatter position around the source centre, avoiding lakes and homes
             food_pos = None
             for _ in range(10):
                 angle = self._rng.uniform(0, 2 * np.pi)
                 dist = self._rng.uniform(0, FOOD_SOURCE_SPAWN_RADIUS)
                 offset = np.array([np.cos(angle) * dist, np.sin(angle) * dist])
                 candidate = self.position + offset
-                if not is_in_lake(candidate, float(FOOD_RADIUS), lakes):
+                if not is_in_lake(candidate, float(FOOD_RADIUS), lakes) and not is_in_home(candidate, float(FOOD_RADIUS), kingdoms):
                     food_pos = candidate
                     break
 

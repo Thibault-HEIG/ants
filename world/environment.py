@@ -21,7 +21,7 @@ from core.constants import (
     FOOD_SOURCE_LEFT_ZONE_PROB,
     FOOD_SOURCE_RADIUS,
 )
-from world.food import FoodSource, is_in_lake
+from world.food import FoodSource, is_in_home, is_in_lake
 
 if TYPE_CHECKING:
     from world.world import World
@@ -63,10 +63,11 @@ class EnvironmentSystem:
         # --- Update existing sources and collect spawned food ---
         current_food_count = len(self.world.food_items)
         lakes = getattr(self.world, "lakes", [])
+        kingdoms = getattr(self.world, "kingdoms", None)
         surviving_sources: list[FoodSource] = []
 
         for source in self.food_sources:
-            new_food = source.update(dt, current_food_count, lakes=lakes)
+            new_food = source.update(dt, current_food_count, lakes=lakes, kingdoms=kingdoms)
             self.world.food_items.extend(new_food)
             current_food_count += len(new_food)
 
@@ -86,7 +87,7 @@ class EnvironmentSystem:
                     x = rng.uniform(ZONE_BOUNDARY_X + margin, WORLD_WIDTH - margin)
                 y = rng.uniform(margin, WORLD_HEIGHT - margin)
                 pos = np.array([x, y])
-                if not is_in_lake(pos, FOOD_SOURCE_RADIUS, lakes):
+                if not is_in_lake(pos, FOOD_SOURCE_RADIUS, lakes) and not is_in_home(pos, FOOD_SOURCE_RADIUS, kingdoms):
                     new_source = FoodSource(pos, rng)
                     self.food_sources.append(new_source)
                     self.source_cooldown = FOOD_SOURCE_COOLDOWN

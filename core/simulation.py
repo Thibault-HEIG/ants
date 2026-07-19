@@ -287,15 +287,6 @@ class Simulation:
         from species.spider_constants import SPIDER_METRIC_BOUNDS
         from core.utils import SpeciesStats
 
-        recap_metrics = [
-            "survival_time",
-            "computed_food_eaten",
-            "computed_enemies_touched",
-            "times_eating_for_nothing",
-            "times_attacking_for_nothing",
-            "tiles_covered",
-        ]
-
         print("\n" + "=" * 80)
         print(" " * 26 + "SIMULATION METRIC RECAP")
         print("=" * 80)
@@ -309,12 +300,21 @@ class Simulation:
                 elif species_name == "Spider":
                     bounds_table = SPIDER_METRIC_BOUNDS
 
+            recap_metrics = list(bounds_table.keys()) if bounds_table else [
+                "survival_time",
+                "computed_food_eaten",
+                "computed_enemies_touched",
+                "times_eating_for_nothing",
+                "times_attacking_for_nothing",
+                "tiles_covered",
+            ]
+
             peak_table = SpeciesStats.max_metrics.get(species_name, {})
             all_creatures = self.world.creatures.get(cls, []) + self.world.dead_creatures.get(cls, [])
 
             print(f"\n--- {species_name} Metric Recap ---")
-            print(f"  {'Metric':<29} | {'Max Value':>10} | {'Bound':>10} | Status")
-            print("  " + "-" * 62)
+            print(f"  {'Metric':<45} | {'Max Value':>10} | {'Bound':>10} | Status")
+            print("  " + "-" * 78)
             for metric_name in recap_metrics:
                 peak_val = peak_table.get(metric_name, 0.0)
                 curr_max = max((float(getattr(c, metric_name, 0.0)) for c in all_creatures), default=0.0)
@@ -329,6 +329,6 @@ class Simulation:
                 bound_str = f"{bound_val:.0f}" if bound_val % 1 == 0 else f"{bound_val:.1f}"
                 warning = "⚠️" if val > bound_val else ""
 
-                print(f"  {metric_name:<29} | {val_str:>10} | {bound_str:>10} | {warning}")
+                print(f"  {metric_name:<45} | {val_str:>10} | {bound_str:>10} | {warning}")
 
         print("\n" + "=" * 80 + "\n")

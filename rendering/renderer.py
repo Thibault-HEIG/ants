@@ -200,7 +200,7 @@ class Renderer:
                     pygame.draw.circle(self.surface_a, (100, 80, 60), (kx, ky), int(getattr(kingdom, "spawn_radius", 60.0)), 2)
 
             for food in world.food_items:
-                if getattr(food, "consumed", False):
+                if getattr(food, "consumed", False) or getattr(food, "being_carried", False):
                     continue
                 fx, fy = int(food.position[0]), int(food.position[1])
                 food_type = getattr(food, "food_type", None)
@@ -276,6 +276,19 @@ class Renderer:
             hx = cx + int(math.cos(creature.direction) * creature.radius * 1.5)
             hy = cy + int(math.sin(creature.direction) * creature.radius * 1.5)
             pygame.draw.line(self.surface_a, (255, 255, 255), (cx, cy), (hx, hy), 2)
+
+        carried = getattr(creature, "carried_object", None)
+        if carried is not None and not getattr(carried, "consumed", False):
+            food_type = getattr(carried, "food_type", None)
+            sprite = self.sprites.get(food_type) if food_type else None
+            if sprite is not None:
+                w, h = sprite.get_width(), sprite.get_height()
+                scaled = pygame.transform.smoothscale(sprite, (max(1, int(w * 0.7)), max(1, int(h * 0.5))))
+                rect = scaled.get_rect(center=(cx, cy))
+                self.surface_a.blit(scaled, rect)
+            else:
+                r = max(1, int(getattr(carried, "radius", 5) * 0.5))
+                pygame.draw.circle(self.surface_a, (80, 220, 100), (cx, cy), r)
 
         if not is_dead:
             if is_top_fit:

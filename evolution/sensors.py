@@ -84,14 +84,24 @@ class SensorData:
     # --- Pheromone concentration under foot ---
     pheromone_strength: float = 0.0
 
+    # --- Carry-related inputs (set by creature.update before to_array) ---
+    is_carrying: float = 0.0     # {0, 1}
+    can_eat: float = 0.0         # {0, 1} food within EAT_PICKUP_RADIUS
+    can_take: float = 0.0        # {0, 1} can_touch AND not carrying
+    can_touch: float = 0.0       # {0, 1} takeable object within EAT_PICKUP_RADIUS
+    home_distance: float = 0.0   # [0, 1] 0 = far, 1 = at home
+    home_angle: float = 0.0      # [-1, 1] relative angle to home / pi
+    is_at_home: float = 0.0      # {0, 1} within kingdom spawn_radius
+
     def to_array(self, hp: float, zone: float, speed: float, age: float) -> np.ndarray:
-        """Convert sensor readings + internal state into an 80-element input vector.
+        """Convert sensor readings + internal state into an 87-element input vector.
 
         Layout:
           [0..71]  8 sectors × 9 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist, pheromone_dist]
-          [72..79] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp, pheromone_strength]
+          [72..86] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp, pheromone_strength,
+                                  is_carrying, can_eat, can_take, can_touch, home_distance, home_angle, is_at_home]
         """
-        arr = np.empty(NN_NUM_SENSORS * 9 + 8, dtype=float)
+        arr = np.empty(NN_NUM_SENSORS * 9 + 15, dtype=float)
 
         # Pack sector readings: 8 sectors × 9 features
         idx = 0
@@ -107,7 +117,7 @@ class SensorData:
             arr[idx + 8] = sector.pheromone_distance
             idx += 9
 
-        # Pack state inputs
+        # Pack state inputs (15 values)
         arr[idx] = hp
         arr[idx + 1] = zone
         arr[idx + 2] = speed
@@ -116,6 +126,13 @@ class SensorData:
         arr[idx + 5] = self.enemy_density
         arr[idx + 6] = self.has_gained_hp
         arr[idx + 7] = self.pheromone_strength
+        arr[idx + 8] = self.is_carrying
+        arr[idx + 9] = self.can_eat
+        arr[idx + 10] = self.can_take
+        arr[idx + 11] = self.can_touch
+        arr[idx + 12] = self.home_distance
+        arr[idx + 13] = self.home_angle
+        arr[idx + 14] = self.is_at_home
 
         return arr
 
@@ -408,7 +425,7 @@ class Sensors:
                 
                 # Is it food?
                 if hasattr(n, "consumed"):
-                    if not n.consumed:
+                    if not n.consumed and not getattr(n, 'being_carried', False):
                         food_targets.append((px, py, float(n.radius)))
             
                 # Is it a creature?
@@ -426,7 +443,7 @@ class Sensors:
             # Fallback: full-list mode (no spatial hash available)
             food_targets = [
                 (float(f.position[0]), float(f.position[1]), float(f.radius))
-                for f in food_items if not getattr(f, 'consumed', False)
+                for f in food_items if not getattr(f, 'consumed', False) and not getattr(f, 'being_carried', False)
             ]
             enemy_targets = [
                 (float(e.position[0]), float(e.position[1]), float(e.radius), bool(getattr(e, 'is_eating', False)), bool(getattr(e, 'is_attacking', False)))
@@ -464,6 +481,10 @@ class Sensors:
         # -----------------------------------------------------------------
         data.ally_density = self._count_density(ox, oy, ally_targets)
         data.enemy_density = self._count_density(ox, oy, enemy_targets)
+
+        # Store target lists for creature.update() to compute can_eat/can_take/can_touch
+        data._food_targets = food_targets
+        data._enemy_targets = enemy_targets
 
         return data
 

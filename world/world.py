@@ -31,11 +31,12 @@ from core.constants import (
 from core.utils import SpeciesStats
 from evolution.genetics import mutate, select_parents
 from species.ant import Ant
+from species.ant_constants import ANT_SPAWN_NB_AT_DELIVERY
 from species.spider import Spider
 from world.food import Food, FoodSource
 from world.kingdom import Kingdom
 from world.obstacle import Lake
-from world.physics import SpatialHash, resolve_combat, resolve_food_collisions, resolve_lake_collisions
+from world.physics import SpatialHash, resolve_combat, resolve_food_collisions, resolve_take_release, resolve_lake_collisions
 from world.environment import EnvironmentSystem
 from world.grid import TileGrid
 
@@ -255,7 +256,39 @@ class World:
         # Phase 3 & 4: Physics and collision resolution (spatial hash accelerated)
         resolve_combat(self.creatures, spatial_hash=self.spatial_hash)
         resolve_food_collisions(self.creatures, self.food_items, spatial_hash=self.spatial_hash)
+        delivered_counts = resolve_take_release(self.creatures, self.food_items, kingdoms=self.kingdoms, spatial_hash=self.spatial_hash)
         resolve_lake_collisions(self.creatures, self.lakes)
+
+        # Phase 4.5: Spawn on delivery for continuous mode
+        for cls, count in delivered_counts.items():
+            if count > 0 and self._get_repro_mode(cls) == "continuous":
+                pop = self.creatures[cls]
+                max_pop = getattr(cls, "max_population", 100)
+                if len(pop) == 0:
+                    continue
+                for _ in range(count):
+                    num_to_spawn = min(ANT_SPAWN_NB_AT_DELIVERY, max_pop - len(self.creatures[cls]))
+                    if num_to_spawn <= 0:
+                        break
+                    fittest = sorted(self.creatures[cls], key=lambda c: c.compute_fitness(), reverse=True)
+                    kingdom = self.kingdoms.get(cls)
+                    for i in range(num_to_spawn):
+                        parent = fittest[i % len(fittest)]
+                        if kingdom is not None:
+                            child_pos = kingdom.sample_spawn_position(self.rng, float(self.width), float(self.height))
+                        else:
+                            offset = self.rng.uniform(-5.0, 5.0, size=2)
+                            child_pos = np.clip(parent.position + offset, 0.0, [self.width, self.height])
+                        child = cls(child_pos, self.rng)
+                        if self.is_npc(cls):
+                            child.genome = parent.genome.copy()
+                        else:
+                            child.genome = mutate(parent.genome, self.rng,
+                                                  mutation_rate=CONTINUOUS_MUTATION_RATE,
+                                                  mutation_strength=CONTINUOUS_MUTATION_STRENGTH)
+                        child.world = self
+                        self.creatures[cls].append(child)
+                        self.all_time_counts[cls] = self.all_time_counts.get(cls, 0) + 1
 
         # Phase 5: Cleanup dead entities
         for cls in list(self.creatures.keys()):
