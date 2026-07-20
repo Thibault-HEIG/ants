@@ -45,7 +45,7 @@ class RayResult:
     ally_is_eating: float = 0.0
     ally_is_attacking: float = 0.0
     wall_distance: float = 0.0
-    pheromone_distance: float = 0.0
+    pheromone_strength: float = 0.0
 
 
 @dataclass
@@ -59,7 +59,7 @@ class SectorReading:
     ally_is_attacking: float = 0.0    # {0, 1}: 1 if seen ally is attacking
     food_distance: float = 0.0        # inverted: 0 = no food, 1 = touching
     wall_distance: float = 0.0        # inverted: 0 = no wall, 1 = touching
-    pheromone_distance: float = 0.0   # inverted: 0 = no pheromone trail, 1 = touching trail
+    pheromone_strength: float = 0.0   # weighted sum of pheromone intensity along ray
 
 
 def _default_sectors() -> list[SectorReading]:
@@ -97,7 +97,7 @@ class SensorData:
         """Convert sensor readings + internal state into an 87-element input vector.
 
         Layout:
-          [0..71]  8 sectors × 9 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist, pheromone_dist]
+          [0..71]  8 sectors × 9 features [enemy_dist, enemy_eat, enemy_atk, ally_dist, ally_eat, ally_atk, food_dist, wall_dist, pheromone_strength]
           [72..86] state inputs: [hp, zone, speed, age, ally_density, enemy_density, has_gained_hp, pheromone_strength,
                                   is_carrying, can_eat, can_take, can_touch, home_distance, home_angle, is_at_home]
         """
@@ -114,7 +114,7 @@ class SensorData:
             arr[idx + 5] = sector.ally_is_attacking
             arr[idx + 6] = sector.food_distance
             arr[idx + 7] = sector.wall_distance
-            arr[idx + 8] = sector.pheromone_distance
+            arr[idx + 8] = sector.pheromone_strength
             idx += 9
 
         # Pack state inputs (15 values)
@@ -178,7 +178,7 @@ class SensorRay:
         result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
         result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
         result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height, lakes)
-        result.pheromone_distance = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_grid, pheromone_cell_size)
+        result.pheromone_strength = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_grid, pheromone_cell_size)
 
         return result
 
@@ -330,24 +330,36 @@ class SensorRay:
         pheromone_grid: np.ndarray | None,
         cell_size: float,
     ) -> float:
-        """Detect the nearest pheromone trail cell along the ray direction."""
+        """Calculate the weighted sum of pheromone intensity along the ray direction.
+
+        Formula: sum(pheromone_intensity * distance_weight) for tiles in ray,
+        where distance_weight = max(0.0, 1.0 - (dist / max_range)).
+        """
         if pheromone_grid is None:
             return 0.0
 
         gw, gh = pheromone_grid.shape
-        step = 10.0
-        dist = 5.0
+        step = cell_size * 0.5
+        dist = step
         max_r = self.max_range
+        total_strength = 0.0
+        visited: set[tuple[int, int]] = set()
         while dist <= max_r:
             px = ox + rdx * dist
             py = oy + rdy * dist
             gx = int(px / cell_size)
             gy = int(py / cell_size)
             if 0 <= gx < gw and 0 <= gy < gh:
-                if pheromone_grid[gx, gy] > 0.01:
-                    return max(0.0, 1.0 - (dist / max_r))
+                cell = (gx, gy)
+                if cell not in visited:
+                    visited.add(cell)
+                    intensity = float(pheromone_grid[gx, gy])
+                    if intensity > 0.0:
+                        distance_weight = max(0.0, 1.0 - (dist / max_r))
+                        total_strength += intensity * distance_weight
             dist += step
-        return 0.0
+        # Squash raw sum [0, ∞) to [0, 1) smoothly using tanh while keeping 0.0 at exactly 0.0  
+        return math.tanh(total_strength * 0.5)
 
 
 class Sensors:
@@ -474,7 +486,7 @@ class Sensors:
             data.sectors[i].ally_is_attacking = ray_res.ally_is_attacking
             data.sectors[i].food_distance = ray_res.food_distance
             data.sectors[i].wall_distance = ray_res.wall_distance
-            data.sectors[i].pheromone_distance = ray_res.pheromone_distance
+            data.sectors[i].pheromone_strength = ray_res.pheromone_strength
 
         # -----------------------------------------------------------------
         # Density awareness — reuse the extracted tuples

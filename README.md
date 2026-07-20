@@ -40,9 +40,9 @@ Each creature runs this cycle **every frame**:
 Sense → Think → Act → Evolve
 ```
 
-1. **Sense** — Eight directional vision rays and density sensors detect food, enemies, allies, and walls.
-2. **Think** — A neural network processes 71 sensor inputs and outputs `[turn, speed, attack, eat]`.
-3. **Act** — The creature moves and engages in combat according to the brain's decision.
+1. **Sense** — Eight directional vision rays, density sensors, and navigation/interaction sensors detect food, enemies, allies, walls, pheromone trails, item availability, and home coordinates.
+2. **Think** — A neural network processes 87 sensor inputs and outputs `[turn, speed, attack, eat, take, release]`.
+3. **Act** — The creature moves, engages in combat, consumes food, or takes/carries/releases items according to the brain's decision.
 4. **Evolve** — Depending on the species' configured evolution mode, reproduction happens either continuously (threshold-based spawning) or in fixed-length generational episodes (elitism-based replacement). Children inherit mutated copies of the parent's brain weights.
 
 ### The World
@@ -71,24 +71,24 @@ Combat uses **Reach vs Hurtbox** mechanics — damage is dealt when a creature a
 
 ## Neural Network Architecture
 
-Each creature has an identical `71 → 16 → 8 → 4` fully-connected neural network (tanh activations, two hidden layers, no ML libraries — pure NumPy).
+Each creature has an identical `87 → 16 → 8 → 6` fully-connected neural network (tanh activations, two hidden layers, no ML libraries — pure NumPy).
 
-### 71 Inputs
+### 87 Inputs
 
-**8-Sector Vision (64 inputs)** — 8 directional sensors evenly distributed across the ±50° FOV. Each sensor reports 8 features using inverted convention for distances: `0.0` = nothing detected, `1.0` = touching.
+**8-Sector Vision (72 inputs)** — 8 directional sensors evenly distributed across the ±80° FOV (160° total). Each sensor reports 9 features using inverted convention for distances: `0.0` = nothing detected, `1.0` = touching.
 
 | Indices | Sensor | Angle Offset |
 |---------|--------|--------------|
-| 0–7 | Sensor 0 | −50.0° (leftmost) |
-| 8–15 | Sensor 1 | −35.7° |
-| 16–23 | Sensor 2 | −21.4° |
-| 24–31 | Sensor 3 | −7.1° |
-| 32–39 | Sensor 4 | +7.1° |
-| 40–47 | Sensor 5 | +21.4° |
-| 48–55 | Sensor 6 | +35.7° |
-| 56–63 | Sensor 7 | +50.0° (rightmost) |
+| 0–8 | Sensor 0 | −80.0° (leftmost) |
+| 9–17 | Sensor 1 | −57.1° |
+| 18–26 | Sensor 2 | −34.3° |
+| 27–35 | Sensor 3 | −11.4° |
+| 36–44 | Sensor 4 | +11.4° |
+| 45–53 | Sensor 5 | +34.3° |
+| 54–62 | Sensor 6 | +57.1° |
+| 63–71 | Sensor 7 | +80.0° (rightmost) |
 
-Each sensor outputs 8 values:
+Each sensor outputs 9 values:
 
 | Feature | Range | Description |
 |---------|-------|-------------|
@@ -99,21 +99,29 @@ Each sensor outputs 8 values:
 | `ally_is_eating` | {0, 1} | 1 = seen ally is eating |
 | `ally_is_attacking` | {0, 1} | 1 = seen ally is attacking |
 | `food_distance` | [0, 1] | 0 = no food, 1 = touching |
-| `wall_distance` | [0, 1] | 0 = no wall in range, 1 = touching wall |
+| `pheromone_strength` | [0, 1) | Weighted sum of pheromone intensity along ray squashed via tanh (`math.tanh(sum * 0.5)`) |
 
-**Internal State (7 inputs)**
+**Internal State & Navigation (15 inputs)**
 
 | # | Input | Range | Category |
 |---|-------|-------|----------|
-| 64 | `hp` | [0, 1] | 🧠 Internal |
-| 65 | `zone` | {0, 1} | 🧠 Internal (0 = Spider, 1 = Ant) |
-| 66 | `speed` | [0, 1] | 🧠 Internal |
-| 67 | `age` | [0, 1] | 🧠 Internal |
-| 68 | `ally_density` | [0, 1] | 🐜 Teamwork |
-| 69 | `enemy_density` | [0, 1] | 🐜 Teamwork |
-| 70 | `has_gained_hp` | {0, 1} | 🧠 Internal (HP increased in last second) |
+| 72 | `hp` | [0, 1] | 🧠 Internal |
+| 73 | `zone` | {0, 1} | 🧠 Internal (0 = Spider, 1 = Ant) |
+| 74 | `speed` | [0, 1] | 🧠 Internal |
+| 75 | `age` | [0, 1] | 🧠 Internal |
+| 76 | `ally_density` | [0, 1] | 🐜 Teamwork |
+| 77 | `enemy_density` | [0, 1] | 🐜 Teamwork |
+| 78 | `has_gained_hp` | {0, 1} | 🧠 Internal (HP increased in last second) |
+| 79 | `pheromone_strength` | [0, 2] | 🐜 Navigation (pheromone concentration under foot) |
+| 80 | `is_carrying` | {0, 1} | 🎒 Carry State (1 = currently carrying an object) |
+| 81 | `can_eat` | {0, 1} | 🍽️ Interaction (1 = food within pickup radius) |
+| 82 | `can_take` | {0, 1} | 🎒 Carry State (1 = takeable object within radius & not carrying) |
+| 83 | `can_touch` | {0, 1} | 🍽️ Interaction (1 = object within pickup radius) |
+| 84 | `home_distance` | [0, 1] | 🏰 Navigation (normalised distance to kingdom/home) |
+| 85 | `home_angle` | [-1, 1] | 🏰 Navigation (relative angle to kingdom/home ÷ π) |
+| 86 | `is_at_home` | {0, 1} | 🏰 Navigation (1 = within kingdom spawn radius) |
 
-### 4 Outputs
+### 6 Outputs
 
 | Output | Range | Meaning |
 |--------|-------|---------|
@@ -121,13 +129,15 @@ Each sensor outputs 8 values:
 | `speed` | [0, 1] | 0 = stop, 1 = full speed |
 | `attack` | {0, 1} | 0 = hold fire, 1 = attack (strike reach enabled) |
 | `eat` | {0, 1} | 0 = don't eat, 1 = attempt to eat |
+| `take` | {0, 1} | 0 = don't take, 1 = attempt to pick up an item within range |
+| `release` | {0, 1} | 0 = don't release, 1 = attempt to drop/deliver carried item |
 
 ### Genome
 
-The genome is a flat vector of **1468 floats** — every weight and bias concatenated:
+The genome is a flat vector of **1598 floats** — every weight and bias concatenated:
 
 ```
-[w_input→hidden1 (1136)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (32)] [b_output (4)]
+[w_input→hidden1 (1392)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (48)] [b_output (6)]
 ```
 
 ---
@@ -138,13 +148,43 @@ Creatures perceive the world through two complementary systems:
 
 ### 1. Directional Vision (8 sensors)
 
-Eight vision rays extend from the creature, evenly distributed across a ±50° field of view (100° total). Each ray detects the nearest enemy, ally, food, and wall along its direction. When an enemy or ally is detected, the sensor also reports whether that creature is currently eating (`is_eating`) or attacking (`is_attacking`).
+Eight vision rays extend from the creature, evenly distributed across a ±80° field of view (160° total). Each ray detects the nearest enemy, ally, food, and wall along its direction, as well as the pheromone intensity along the ray (`pheromone_strength`). When an enemy or ally is detected, the sensor also reports whether that creature is currently eating (`is_eating`) or attacking (`is_attacking`).
 
-Distances use **inverted normalisation**: `0.0` = nothing within range, `1.0` = touching. A non-zero value implicitly indicates detection — no separate binary flag is needed.
+For entities and walls, distances use **inverted normalisation**: `0.0` = nothing within range, `1.0` = touching. For pheromone trails, each ray computes the weighted sum of intensity across all intersected grid cells (`sum(pheromone_intensity * distance_weight)`, where `distance_weight = max(0.0, 1.0 - dist / max_range)`) and squashes the raw sum into the `[0, 1)` range using `math.tanh(sum * 0.5)`. A non-zero value implicitly indicates detection — no separate binary flag is needed.
 
 ### 2. Density Awareness (teamwork)
 
 Counts of nearby allies and enemies within sensor range, normalised by a cap of 10. This enables emergent swarming — an ant can "decide" to fight only when outnumbering the enemy.
+
+### 3. Navigation & Item Perception
+
+Creatures perceive their relationship to their home kingdom (`home_distance`, `home_angle`, `is_at_home`), enabling navigation back to base after exploring or gathering resources. They also receive immediate feedback on item interactions (`can_eat`, `can_take`, `can_touch`) and their current carrying status (`is_carrying`).
+
+---
+
+## Item Taking & Releasing Mechanics
+
+Creatures can pick up items (such as unconsumed sugar or seed food items), transport them across the arena, and release or deliver them to their home kingdom.
+
+### Action State Machine & Priorities
+At every frame, the creature's action commands are evaluated with strict priority:
+```
+Attack > Eat > Take > Release
+```
+
+- **While Carrying (`is_carrying == True`)**:
+  - The creature is physically carrying an object (`carried_object`).
+  - **Restrictions**: It cannot `attack`, `eat`, or `take` another item (`take_signal = False`, `is_attacking = False`, `is_eating = False`).
+  - **Movement Penalty**: Carrying an object reduces effective movement speed by 20% (`CARRY_SPEED_MULTIPLIER = 0.8`).
+  - **Navigation & Tracking**: Every step taken toward the home kingdom while carrying an object contributes to `walk_with_object_in_home_direction`, whereas moving away increments `walk_with_object_in_opposite_home_direction`. This enables precise fitness shaping for foraging and resource retrieval.
+
+- **Taking (`take > 0.5`)**:
+  - If the creature is not carrying an object and is within pickup range (`EAT_PICKUP_RADIUS = 20.0`) of an unconsumed, uncarried food item, it picks up the item and enters the carrying state.
+
+- **Releasing & Home Delivery (`release > 0.5`)**:
+  - If the creature activates the `release` output while carrying an object, it drops the item at its current position.
+  - **Home Delivery**: If the item is dropped inside the creature's home kingdom (`is_at_home == True`, within the kingdom's `spawn_radius`), the item is consumed (`consumed = True`), the species' home delivery count increments, and the creature earns a significant `release_at_home` fitness bonus.
+  - **Field Drop**: If released outside the kingdom, the item remains on the ground (`release_anywhere`), allowing other creatures to pick it up or consume it later.
 
 ---
 
@@ -195,10 +235,10 @@ Used for ranking and parent selection. Fitness is calculated directly from raw p
 
 ```python
 # Ants
-fitness = survival_time + food_eaten + enemies_touched + times_eating_for_nothing + times_attacking_for_nothing + follow_pheromones + distance_walked
+fitness = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_home + walk_opposite + release_anywhere + release_at_home) * originality_multiplier
 
 # Spiders
-fitness = survival_time + food_eaten + enemies_touched + times_eating_for_nothing + times_attacking_for_nothing + distance_walked
+fitness = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + survival_time + tiles_covered) * originality_multiplier
 ```
 
 > [!NOTE]
@@ -239,7 +279,7 @@ ants-world/
 │   └── spider_constants.py  # Dedicated Spider parameters & fitness weights
 ├── evolution/
 │   ├── __init__.py
-│   ├── brain.py             # Neural network wrapper (71→16→8→4, genome decoding/encoding)
+│   ├── brain.py             # Neural network wrapper (87→16→8→6, genome decoding/encoding)
 │   ├── network.py           # Generic two-hidden-layer feedforward NeuralNetwork architecture
 │   ├── sensors.py           # 8-sector directional vision & density perception (species agnostic)
 │   └── genetics.py          # Truncation parent selection & Gaussian mutation algorithms
