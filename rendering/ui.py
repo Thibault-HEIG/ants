@@ -14,12 +14,21 @@ import pygame
 
 from core.constants import (
     HUD_TEXT_COLOR,
-    HUD_BG_COLOR,
     HUD_ACCENT_COLOR,
     SPIDER_ACCENT_COLOR,
     GENERATION_DURATION,
 )
 from core.utils import SpeciesStats
+
+_SYS_FONT_CACHE: dict[tuple[str, int, bool], pygame.font.Font] = {}
+
+
+def get_cached_sysfont(name: str, size: int, bold: bool = False) -> pygame.font.Font:
+    """Get a cached Pygame SysFont to avoid repeated system font directory scanning via BufferedReader."""
+    key = (name, size, bold)
+    if key not in _SYS_FONT_CACHE:
+        _SYS_FONT_CACHE[key] = pygame.font.SysFont(name, size, bold=bold)
+    return _SYS_FONT_CACHE[key]
 
 
 
@@ -273,7 +282,7 @@ class LiveFitnessChart:
         self.margin_right = 20
         self.plot_w = self.width - self.margin_left - self.margin_right
         self.plot_h = self.height - self.margin_top - self.margin_bottom
-        self.font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
+        self.font = get_cached_sysfont("Consolas, Courier, monospace", 11, bold=True)
         self._init_surface()
 
     def reset(self) -> None:
@@ -411,7 +420,7 @@ def draw_window_b_panel(
 
     global _stats_font
     if _stats_font is None:
-        _stats_font = pygame.font.SysFont("Consolas, Courier, monospace", 14, bold=True)
+        _stats_font = get_cached_sysfont("Consolas, Courier, monospace", 14, bold=True)
 
     # Import species classes dynamically to compute metrics if needed
     from species.ant import Ant
@@ -464,7 +473,7 @@ def draw_window_b_panel(
     # Draw commands box at the top right of Window B (Stats Window)
     global _commands_font
     if _commands_font is None:
-        _commands_font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
+        _commands_font = get_cached_sysfont("Consolas, Courier, monospace", 11, bold=True)
     draw_commands_box(surface, _commands_font, pos_x=surface.get_width() - 14, pos_y=12, align_right=True)
 
     # Position graph right below the stats box to fill all remaining blank space down to bottom margin

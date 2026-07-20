@@ -35,6 +35,7 @@ from rendering.ui import (
     draw_commands_box,
     draw_window_b_panel,
     LiveFitnessChart,
+    get_cached_sysfont,
 )
 
 if TYPE_CHECKING:
@@ -80,8 +81,8 @@ class Renderer:
         self.chart = LiveFitnessChart(width=self.stats_width - 28, height=320)
 
         self.clock: pygame.time.Clock = pygame.time.Clock()
-        self.font: pygame.font.Font = pygame.font.SysFont("Consolas, Courier, monospace", HUD_FONT_SIZE, bold=True)
-        self.commands_font: pygame.font.Font = pygame.font.SysFont("Consolas, Courier, monospace", 11, bold=True)
+        self.font: pygame.font.Font = get_cached_sysfont("Consolas, Courier, monospace", HUD_FONT_SIZE, bold=True)
+        self.commands_font: pygame.font.Font = get_cached_sysfont("Consolas, Courier, monospace", 11, bold=True)
         self.show_sensors: bool = False
 
         # Load sprites dynamically from assets directory

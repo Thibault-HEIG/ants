@@ -99,7 +99,7 @@ Each sensor outputs 9 values:
 | `ally_is_eating` | {0, 1} | 1 = seen ally is eating |
 | `ally_is_attacking` | {0, 1} | 1 = seen ally is attacking |
 | `food_distance` | [0, 1] | 0 = no food, 1 = touching |
-| `pheromone_strength` | [0, 1) | Weighted sum of pheromone intensity along ray squashed via tanh (`math.tanh(sum * 0.5)`) |
+| `pheromone_strength` | [0, 1] | Weighted sum of pheromone intensity along ray squashed via tanh (`math.tanh(sum * 0.5)`) |
 
 **Internal State & Navigation (15 inputs)**
 
