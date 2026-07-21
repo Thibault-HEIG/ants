@@ -151,6 +151,14 @@ class SensorRay:
     def __init__(self, angle_offset: float, max_range: float) -> None:
         self.angle_offset: float = angle_offset
         self.max_range: float = max_range
+        self.cached_enemy_distance: float = 0.0
+        self.cached_enemy_is_eating: float = 0.0
+        self.cached_enemy_is_attacking: float = 0.0
+        self.cached_ally_distance: float = 0.0
+        self.cached_ally_is_eating: float = 0.0
+        self.cached_ally_is_attacking: float = 0.0
+        self.cached_wall_distance: float = 0.0
+        self.cached_pheromone_strength: float = 0.0
 
     def cast(
         self,
@@ -165,6 +173,7 @@ class SensorRay:
         pheromone_grid: np.ndarray | None = None,
         pheromone_list: list[list[float]] | None = None,
         pheromone_cell_size: float = 10.0,
+        check_slow: bool = True,
     ) -> RayResult:
         """Cast this ray and find the nearest food, enemy, ally, wall/lake, and pheromone trail."""
         ray_angle = heading + self.angle_offset
@@ -176,10 +185,30 @@ class SensorRay:
         oy = float(origin[1])
 
         result.food_distance = self._detect_nearest(ox, oy, rdx, rdy, food_targets)
-        result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
-        result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
-        result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height, lakes)
-        result.pheromone_strength = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_list, pheromone_cell_size)
+
+        if check_slow:
+            result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
+            result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
+            result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height, lakes)
+            result.pheromone_strength = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_list, pheromone_cell_size)
+
+            self.cached_enemy_distance = result.enemy_distance
+            self.cached_enemy_is_eating = result.enemy_is_eating
+            self.cached_enemy_is_attacking = result.enemy_is_attacking
+            self.cached_ally_distance = result.ally_distance
+            self.cached_ally_is_eating = result.ally_is_eating
+            self.cached_ally_is_attacking = result.ally_is_attacking
+            self.cached_wall_distance = result.wall_distance
+            self.cached_pheromone_strength = result.pheromone_strength
+        else:
+            result.enemy_distance = self.cached_enemy_distance
+            result.enemy_is_eating = self.cached_enemy_is_eating
+            result.enemy_is_attacking = self.cached_enemy_is_attacking
+            result.ally_distance = self.cached_ally_distance
+            result.ally_is_eating = self.cached_ally_is_eating
+            result.ally_is_attacking = self.cached_ally_is_attacking
+            result.wall_distance = self.cached_wall_distance
+            result.pheromone_strength = self.cached_pheromone_strength
 
         return result
 
@@ -378,6 +407,8 @@ class Sensors:
         Radius for counting nearby allies/enemies.
     """
 
+    _instance_count: int = 0
+
     def __init__(
         self,
         sensor_range: float,
@@ -386,6 +417,11 @@ class Sensors:
     ) -> None:
         self.sensor_range: float = sensor_range
         self.density_radius: float = density_radius if density_radius is not None else sensor_range
+
+        # Stagger initial checks across 10 ticks to prevent frame spikes while updating every 10 ticks
+        self.tick_counter: int = Sensors._instance_count % 10
+        Sensors._instance_count += 1
+        self._has_perceived_once: bool = False
 
         # Create 8 rays evenly spaced across the FOV [-sensor_angle, +sensor_angle]
         offsets = np.linspace(-sensor_angle, sensor_angle, NN_NUM_SENSORS)
@@ -473,6 +509,10 @@ class Sensors:
         # -----------------------------------------------------------------
         # Cast 8 rays using the pre-extracted target tuples
         # -----------------------------------------------------------------
+        check_slow = not self._has_perceived_once or (self.tick_counter % 10 == 0)
+        self._has_perceived_once = True
+        self.tick_counter += 1
+
         for i, ray in enumerate(self.rays):
             ray_res = ray.cast(
                 position, direction, food_targets, enemy_targets, ally_targets,
@@ -481,6 +521,7 @@ class Sensors:
                 pheromone_grid=pheromone_grid,
                 pheromone_list=pheromone_list,
                 pheromone_cell_size=pheromone_cell_size,
+                check_slow=check_slow,
             )
             data.sectors[i].enemy_distance = ray_res.enemy_distance
             data.sectors[i].enemy_is_eating = ray_res.enemy_is_eating
