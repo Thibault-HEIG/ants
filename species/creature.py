@@ -23,6 +23,7 @@ from core.constants import (
     ZONE_BOUNDARY_X,
     CARRY_SPEED_MULTIPLIER,
     EAT_PICKUP_RADIUS,
+    ATTACK_DURATION,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -125,6 +126,7 @@ class Creature(ABC):
         self._last_tile: tuple[int, int] | None = None
         self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
+        self.attack_timer: float = 0.0
 
         # --- Eating state machine ---
         self.is_eating: bool = False
@@ -268,6 +270,7 @@ class Creature(ABC):
         # While carrying: can't attack, eat, or take. Can only move + release.
         if is_carrying:
             self.is_attacking = False
+            self.attack_timer = 0.0
             self.is_eating = False
             self.eat_timer = 0.0
             self.take_signal = False
@@ -294,6 +297,7 @@ class Creature(ABC):
             self.eat_timer -= dt
             self.speed = 0.0
             self.is_attacking = False
+            self.attack_timer = 0.0
             self.take_signal = False
             self.release_signal = False
             # eat_timer expiry is handled by physics.resolve_food_collisions
@@ -304,11 +308,19 @@ class Creature(ABC):
                 self.eat_timer = self.eating_time
                 self.speed = 0.0
                 self.is_attacking = False
+                self.attack_timer = 0.0
                 self.take_signal = False
                 self.release_signal = False
             else:
                 # Normal movement and combat
-                self.is_attacking = bool(attack_signal > 0.5)
+                if self.is_attacking:
+                    # Committed to attack window — resolve on expiry, don't re-trigger
+                    self.attack_timer -= dt
+                else:
+                    if attack_signal > 0.5:
+                        self.is_attacking = True
+                        self.attack_timer = ATTACK_DURATION
+
                 self.take_signal = bool(take_signal > 0.5)
                 self.release_signal = False  # nothing to release
 

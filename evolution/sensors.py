@@ -163,6 +163,7 @@ class SensorRay:
         world_height: float,
         lakes: list[Any] | None = None,
         pheromone_grid: np.ndarray | None = None,
+        pheromone_list: list[list[float]] | None = None,
         pheromone_cell_size: float = 10.0,
     ) -> RayResult:
         """Cast this ray and find the nearest food, enemy, ally, wall/lake, and pheromone trail."""
@@ -178,7 +179,7 @@ class SensorRay:
         result.enemy_distance, result.enemy_is_eating, result.enemy_is_attacking = self._detect_creature(ox, oy, rdx, rdy, enemy_targets)
         result.ally_distance, result.ally_is_eating, result.ally_is_attacking = self._detect_creature(ox, oy, rdx, rdy, ally_targets)
         result.wall_distance = self._detect_wall(ox, oy, rdx, rdy, world_width, world_height, lakes)
-        result.pheromone_strength = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_grid, pheromone_cell_size)
+        result.pheromone_strength = self._detect_pheromone(ox, oy, rdx, rdy, pheromone_list, pheromone_cell_size)
 
         return result
 
@@ -327,7 +328,7 @@ class SensorRay:
         self,
         ox: float, oy: float,
         rdx: float, rdy: float,
-        pheromone_grid: np.ndarray | None,
+        pheromone_list: list[list[float]] | None,
         cell_size: float,
     ) -> float:
         """Calculate the weighted sum of pheromone intensity along the ray direction.
@@ -335,10 +336,11 @@ class SensorRay:
         Formula: sum(pheromone_intensity * distance_weight) for tiles in ray,
         where distance_weight = max(0.0, 1.0 - (dist / max_range)).
         """
-        if pheromone_grid is None:
+        if pheromone_list is None:
             return 0.0
 
-        gw, gh = pheromone_grid.shape
+        gw = len(pheromone_list)
+        gh = len(pheromone_list[0]) if gw > 0 else 0
         step = cell_size * 0.5
         dist = step
         max_r = self.max_range
@@ -353,7 +355,7 @@ class SensorRay:
                 cell = (gx, gy)
                 if cell not in visited:
                     visited.add(cell)
-                    intensity = float(pheromone_grid[gx, gy])
+                    intensity = pheromone_list[gx][gy]
                     if intensity > 0.0:
                         distance_weight = max(0.0, 1.0 - (dist / max_r))
                         total_strength += intensity * distance_weight
@@ -404,6 +406,7 @@ class Sensors:
         spatial_hash: SpatialHash | None = None,
         lakes: list[Any] | None = None,
         pheromone_grid: np.ndarray | None = None,
+        pheromone_list: list[list[float]] | None = None,
         pheromone_cell_size: float = 10.0,
     ) -> SensorData:
         """Gather all sensor readings for one creature without hardcoded class dependencies.
@@ -476,6 +479,7 @@ class Sensors:
                 world_width, world_height,
                 lakes=lakes,
                 pheromone_grid=pheromone_grid,
+                pheromone_list=pheromone_list,
                 pheromone_cell_size=pheromone_cell_size,
             )
             data.sectors[i].enemy_distance = ray_res.enemy_distance
