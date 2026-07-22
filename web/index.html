@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ants vs Spiders — Headless Simulation Core</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #131b2e;
+      --bg-card-hover: #1c2742;
+      --border-color: #243252;
+      --accent-teal: #06b6d4;
+      --accent-ant: #10b981;
+      --accent-spider: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --warning: #f59e0b;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header Navbar */
+    header {
+      background: rgba(19, 27, 46, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--accent-ant), var(--accent-teal), var(--accent-spider));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-ant);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge.disconnected {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--accent-spider);
+      border-color: rgba(244, 63, 94, 0.3);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.45rem 0.85rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-teal);
+    }
+    .btn-active {
+      background: rgba(6, 182, 212, 0.2);
+      border-color: var(--accent-teal);
+      color: var(--accent-teal);
+    }
+
+    /* Main Container */
+    .app-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      height: calc(100vh - 60px);
+      overflow: hidden;
+    }
+
+    /* Canvas Viewport */
+    .viewport-container {
+      position: relative;
+      background: #060911;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      display: block;
+      cursor: grab;
+    }
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    .viewport-overlay {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .overlay-card {
+      background: rgba(19, 27, 46, 0.8);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .ultra-banner {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--warning);
+      color: var(--warning);
+      font-weight: 600;
+    }
+
+    /* Sidebar Tabs & Panels */
+    .sidebar {
+      background: var(--bg-card);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(9, 13, 22, 0.5);
+    }
+    .tab {
+      flex: 1;
+      padding: 0.75rem;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .tab.active {
+      color: var(--accent-teal);
+      border-bottom-color: var(--accent-teal);
+      background: var(--bg-card);
+    }
+
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: none;
+    }
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Metric Cards & Tables */
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .species-card {
+      background: rgba(9, 13, 22, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+    }
+    .species-card.ant { border-top: 3px solid var(--accent-ant); }
+    .species-card.spider { border-top: 3px solid var(--accent-spider); }
+
+    .species-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      padding: 0.2rem 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.05);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--text-muted); }
+    .stat-val { font-family: var(--font-mono); font-weight: 600; }
+
+    /* Metric Bounds Table */
+    .bounds-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+    }
+    .bounds-table th, .bounds-table td {
+      padding: 0.4rem 0.5rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .bounds-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      background: rgba(0,0,0,0.2);
+    }
+    .bounds-table td.mono {
+      font-family: var(--font-mono);
+    }
+    .warning-badge {
+      color: var(--warning);
+      font-weight: 700;
+    }
+
+    /* Chart Box */
+    .chart-box {
+      background: rgba(9, 13, 22, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      height: 220px;
+    }
+
+    /* Constants Form */
+    .constant-group {
+      background: rgba(9, 13, 22, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .constant-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+    }
+    .constant-item label {
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      color: var(--text-main);
+    }
+    .constant-item input {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      width: 100px;
+      text-align: right;
+    }
+    .cat-tag {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.2rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .cat-safe { background: rgba(16, 185, 129, 0.2); color: var(--accent-ant); }
+    .cat-deferred { background: rgba(6, 182, 212, 0.2); color: var(--accent-teal); }
+    .cat-restart { background: rgba(244, 63, 94, 0.2); color: var(--accent-spider); }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--accent-spider);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      max-width: 450px;
+      width: 90%;
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-spider);
+      margin-bottom: 0.5rem;
+    }
+    .modal-body {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      line-height: 1.4;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-title">Ants vs Spiders</div>
+      <div id="connectionStatus" class="status-badge disconnected">
+        <span class="status-dot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <button class="btn" id="btnPause" title="Space">⏸ Pause</button>
+      <button class="btn" id="btnSpeedDown" title="← or ↓">⏪</button>
+      <span id="speedDisplay" style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600;">1x</span>
+      <button class="btn" id="btnSpeedUp" title="→ or ↑">⏩</button>
+      <button class="btn" id="btnSensors" title="S key">👁 Rays</button>
+      <button class="btn" id="btnUltra" title="U key">⚡ Ultra</button>
+      <button class="btn" id="btnSave">💾 Save</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <!-- Viewport -->
+    <div class="viewport-container" id="viewport">
+      <canvas id="simCanvas"></canvas>
+
+      <div class="viewport-overlay">
+        <div class="overlay-card">
+          <span>Time: <strong id="timeDisplay">0.0s</strong></span>
+          <span>Gen: <strong id="genDisplay">1</strong></span>
+        </div>
+        <div id="ultraBanner" class="overlay-card ultra-banner" style="display: none;">
+          ⚡ ULTRA MODE ACTIVE (Render Disabled)
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Panel -->
+    <div class="sidebar">
+      <div class="tabs">
+        <div class="tab active" data-tab="stats">Stats</div>
+        <div class="tab" data-tab="bounds">Bounds</div>
+        <div class="tab" data-tab="constants">Constants</div>
+        <div class="tab" data-tab="commands">Controls</div>
+      </div>
+
+      <!-- Tab: Stats -->
+      <div id="tabStats" class="tab-content active">
+        <div class="section-title">Ecosystem Overview</div>
+        <div class="grid-2">
+          <div class="species-card ant">
+            <div class="species-name" style="color: var(--accent-ant);">
+              🐜 Ants
+              <span id="antAlive" class="stat-val">0/0</span>
+            </div>
+            <div class="stat-row"><span class="stat-label">Best Fit</span><span id="antBestFit" class="stat-val">0.00</span></div>
+            <div class="stat-row"><span class="stat-label">Avg Fit</span><span id="antAvgFit" class="stat-val">0.00</span></div>
+            <div class="stat-row"><span class="stat-label">Best Food</span><span id="antBestFood" class="stat-val">0</span></div>
+            <div class="stat-row"><span class="stat-label">Best Life</span><span id="antBestLife" class="stat-val">0.0s</span></div>
+          </div>
+
+          <div class="species-card spider">
+            <div class="species-name" style="color: var(--accent-spider);">
+              🕷 Spiders
+              <span id="spiderAlive" class="stat-val">0/0</span>
+            </div>
+            <div class="stat-row"><span class="stat-label">Best Fit</span><span id="spiderBestFit" class="stat-val">0.00</span></div>
+            <div class="stat-row"><span class="stat-label">Avg Fit</span><span id="spiderAvgFit" class="stat-val">0.00</span></div>
+            <div class="stat-row"><span class="stat-label">Best Touches</span><span id="spiderBestEnemies" class="stat-val">0</span></div>
+            <div class="stat-row"><span class="stat-label">Best Life</span><span id="spiderBestLife" class="stat-val">0.0s</span></div>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 0.5rem;">Live Fitness Curves</div>
+        <div class="chart-box">
+          <canvas id="fitnessChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Tab: Metric Bounds -->
+      <div id="tabBounds" class="tab-content">
+        <div class="section-title">Ant Metric Bounds</div>
+        <table class="bounds-table">
+          <thead>
+            <tr><th>Metric</th><th>Max Observed</th><th>Bound</th><th>Status</th></tr>
+          </thead>
+          <tbody id="antBoundsBody"></tbody>
+        </table>
+
+        <div class="section-title" style="margin-top: 1rem;">Spider Metric Bounds</div>
+        <table class="bounds-table">
+          <thead>
+            <tr><th>Metric</th><th>Max Observed</th><th>Bound</th><th>Status</th></tr>
+          </thead>
+          <tbody id="spiderBoundsBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Tab: Constants Registry -->
+      <div id="tabConstants" class="tab-content">
+        <div class="section-title">Hot-Swappable Config</div>
+        <div id="constantsContainer"></div>
+      </div>
+
+      <!-- Tab: Commands Panel -->
+      <div id="tabCommands" class="tab-content">
+        <div class="section-title">Keyboard Shortcuts</div>
+        <table class="bounds-table">
+          <thead><tr><th>Key</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">Space</td><td>Pause / Resume Simulation</td></tr>
+            <tr><td class="mono">↑ / →</td><td>Increase Simulation Speed</td></tr>
+            <tr><td class="mono">↓ / ←</td><td>Decrease Simulation Speed</td></tr>
+            <tr><td class="mono">S</td><td>Save Top 10% Brains to JSON</td></tr>
+            <tr><td class="mono">U</td><td>Toggle Ultra Mode (Fast Exec)</td></tr>
+            <tr><td class="mono">P</td><td>Print Population Recap (Server Console)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Restart Modal -->
+  <div id="restartModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">⚠️ Simulation Reset Required</div>
+      <div class="modal-body">
+        The constant <strong id="modalKey"></strong> changes network geometry or initial world state. Changing this parameter requires resetting the simulation.
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="btnCancelRestart">Cancel</button>
+        <button class="btn" id="btnConfirmRestart" style="background: var(--accent-spider); border-color: var(--accent-spider);">Confirm & Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- WebSocket & State ---
+    let ws = null;
+    let showSensors = false;
+    let camera = { x: 0, y: 0, zoom: 1 };
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+    let latestSnapshot = null;
+    let liveConstants = {};
+
+    // --- DOM Elements ---
+    const simCanvas = document.getElementById("simCanvas");
+    const ctx = simCanvas.getContext("2d");
+    const viewport = document.getElementById("viewport");
+
+    // --- Resize Canvas ---
+    function resizeCanvas() {
+      simCanvas.width = viewport.clientWidth;
+      simCanvas.height = viewport.clientHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // --- Chart.js Setup ---
+    const chartCtx = document.getElementById("fitnessChart").getContext("2d");
+    const fitnessChart = new Chart(chartCtx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "Ant Best", borderColor: "#10b981", data: [], borderWidth: 2, pointRadius: 0 },
+          { label: "Ant Avg", borderColor: "#059669", borderDash: [4,4], data: [], borderWidth: 1.5, pointRadius: 0 },
+          { label: "Spider Best", borderColor: "#f43f5e", data: [], borderWidth: 2, pointRadius: 0 },
+          { label: "Spider Avg", borderColor: "#e11d48", borderDash: [4,4], data: [], borderWidth: 1.5, pointRadius: 0 },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: { display: false },
+          y: { grid: { color: "#243252" }, ticks: { color: "#94a3b8" } }
+        },
+        plugins: {
+          legend: { labels: { color: "#f8fafc", font: { size: 10 } } }
+        }
+      }
+    });
+
+    // --- WebSocket Connection ---
+    function connectWS() {
+      const host = window.location.hostname || "localhost";
+      const wsPort = 8765;
+      ws = new WebSocket(`ws://${host}:${wsPort}`);
+
+      ws.onopen = () => {
+        const badge = document.getElementById("connectionStatus");
+        badge.className = "status-badge";
+        document.getElementById("statusText").innerText = "Connected";
+      };
+
+      ws.onclose = () => {
+        const badge = document.getElementById("connectionStatus");
+        badge.className = "status-badge disconnected";
+        document.getElementById("statusText").innerText = "Disconnected (Retrying...)";
+        setTimeout(connectWS, 2000);
+      };
+
+      ws.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "full" || msg.type === "aggregate") {
+          handleSnapshot(msg);
+        } else if (msg.type === "constants_data") {
+          liveConstants = msg.constants;
+          renderConstantsPanel();
+        } else if (msg.type === "constant_update_result") {
+          if (!msg.ok && msg.error === "restart_required") {
+            promptRestartModal(msg.key, msg.value);
+          }
+        }
+      };
+    }
+    connectWS();
+
+    // --- Handle Snapshot Update ---
+    function handleSnapshot(snap) {
+      latestSnapshot = snap;
+      
+      // Update UI Text
+      document.getElementById("timeDisplay").innerText = snap.time.toFixed(1) + "s";
+      document.getElementById("genDisplay").innerText = snap.generation;
+      document.getElementById("speedDisplay").innerText = snap.speed + "x";
+      document.getElementById("btnPause").innerText = snap.paused ? "▶ Resume" : "⏸ Pause";
+      document.getElementById("ultraBanner").style.display = snap.ultra ? "flex" : "none";
+
+      // Stats Update
+      if (snap.stats) {
+        if (snap.stats.Ant) {
+          document.getElementById("antAlive").innerText = `${snap.stats.Ant.alive}/${snap.stats.Ant.maxPop}`;
+          document.getElementById("antBestFit").innerText = snap.stats.Ant.bestFitness.toFixed(2);
+          document.getElementById("antAvgFit").innerText = snap.stats.Ant.avgFitness.toFixed(2);
+          document.getElementById("antBestFood").innerText = snap.stats.Ant.bestFood;
+          document.getElementById("antBestLife").innerText = snap.stats.Ant.bestLifetime.toFixed(1) + "s";
+        }
+        if (snap.stats.Spider) {
+          document.getElementById("spiderAlive").innerText = `${snap.stats.Spider.alive}/${snap.stats.Spider.maxPop}`;
+          document.getElementById("spiderBestFit").innerText = snap.stats.Spider.bestFitness.toFixed(2);
+          document.getElementById("spiderAvgFit").innerText = snap.stats.Spider.avgFitness.toFixed(2);
+          document.getElementById("spiderBestEnemies").innerText = snap.stats.Spider.bestEnemies;
+          document.getElementById("spiderBestLife").innerText = snap.stats.Spider.bestLifetime.toFixed(1) + "s";
+        }
+
+        // Chart Update
+        if (fitnessChart.data.labels.length > 100) {
+          fitnessChart.data.labels.shift();
+          fitnessChart.data.datasets.forEach(ds => ds.data.shift());
+        }
+        fitnessChart.data.labels.push(snap.time.toFixed(1));
+        fitnessChart.data.datasets[0].data.push(snap.stats.Ant ? snap.stats.Ant.bestFitness : 0);
+        fitnessChart.data.datasets[1].data.push(snap.stats.Ant ? snap.stats.Ant.avgFitness : 0);
+        fitnessChart.data.datasets[2].data.push(snap.stats.Spider ? snap.stats.Spider.bestFitness : 0);
+        fitnessChart.data.datasets[3].data.push(snap.stats.Spider ? snap.stats.Spider.avgFitness : 0);
+        fitnessChart.update();
+      }
+
+      // Metric Bounds Update
+      if (snap.metricBounds) {
+        renderBoundsTable("antBoundsBody", snap.metricBounds.Ant || {});
+        renderBoundsTable("spiderBoundsBody", snap.metricBounds.Spider || {});
+      }
+
+      // Render World on Canvas
+      if (snap.type === "full") {
+        renderWorld(snap);
+      }
+    }
+
+    function renderBoundsTable(tbodyId, bounds) {
+      const tbody = document.getElementById(tbodyId);
+      tbody.innerHTML = "";
+      for (const [metric, data] of Object.entries(bounds)) {
+        const tr = document.createElement("tr");
+        const isWarn = data.max > data.bound;
+        tr.innerHTML = `
+          <td>${metric}</td>
+          <td class="mono">${data.max.toFixed(1)}</td>
+          <td class="mono">${data.bound.toFixed(1)}</td>
+          <td>${isWarn ? '<span class="warning-badge">⚠️ Over</span>' : '<span style="color:var(--accent-ant);">OK</span>'}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // --- Canvas Rendering ---
+    function renderWorld(snap) {
+      ctx.clearRect(0, 0, simCanvas.width, simCanvas.height);
+      ctx.save();
+
+      // Camera transformation
+      ctx.translate(simCanvas.width / 2 + camera.x, simCanvas.height / 2 + camera.y);
+      ctx.scale(camera.zoom, camera.zoom);
+      ctx.translate(-snap.world.width / 2, -snap.world.height / 2);
+
+      // World Boundary
+      ctx.fillStyle = "#090d16";
+      ctx.fillRect(0, 0, snap.world.width, snap.world.height);
+      ctx.strokeStyle = "#243252";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, snap.world.width, snap.world.height);
+
+      // Territory Divide
+      ctx.setLineDash([8, 8]);
+      ctx.strokeStyle = "#334155";
+      ctx.beginPath();
+      ctx.moveTo(snap.world.width / 2, 0);
+      ctx.lineTo(snap.world.width / 2, snap.world.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Lakes
+      snap.lakes.forEach(l => {
+        ctx.fillStyle = "#1e3a8a";
+        ctx.beginPath();
+        ctx.arc(l.x, l.y, l.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#3b82f6";
+        ctx.stroke();
+      });
+
+      // Kingdoms
+      snap.kingdoms.forEach(k => {
+        ctx.fillStyle = k.species === "Ant" ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)";
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, k.spawnRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = k.species === "Ant" ? "#10b981" : "#f43f5e";
+        ctx.stroke();
+      });
+
+      // Pheromones
+      if (snap.pheromones && snap.pheromones.data) {
+        snap.pheromones.data.forEach(([gx, gy, strength]) => {
+          const cs = snap.pheromones.cellSize;
+          ctx.fillStyle = `rgba(6, 182, 212, ${Math.min(0.6, strength * 0.2)})`;
+          ctx.fillRect(gx * cs, gy * cs, cs, cs);
+        });
+      }
+
+      // Food
+      snap.food.forEach(f => {
+        if (f.carried) return;
+        ctx.fillStyle = f.type === "sugar" ? "#38bdf8" : "#f59e0b";
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Dynamic Sensor Angle & FOV from constants
+      const sensorAngleRad = (liveConstants.SENSOR_ANGLE ? liveConstants.SENSOR_ANGLE.value : 1.396);
+      const numSensors = (liveConstants.NN_NUM_SENSORS ? liveConstants.NN_NUM_SENSORS.value : 8);
+
+      // Creatures
+      for (const [spName, list] of Object.entries(snap.creatures)) {
+        const color = spName === "Ant" ? "#10b981" : "#f43f5e";
+        const topIndices = snap.topFit ? (snap.topFit[spName] || []) : [];
+
+        list.forEach((c, idx) => {
+          if (!c.alive) return;
+
+          ctx.save();
+          ctx.translate(c.x, c.y);
+
+          // Top Fit Halo
+          if (topIndices.includes(idx)) {
+            ctx.strokeStyle = "#eab308";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, c.radius + 5, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          // Sensor Rays (Client-side toggle)
+          if (showSensors) {
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.lineWidth = 1;
+            const rayLength = spName === "Ant" ? 180 : 120;
+            const startAngle = c.dir - sensorAngleRad;
+            const step = (sensorAngleRad * 2) / Math.max(1, numSensors - 1);
+
+            for (let i = 0; i < numSensors; i++) {
+              const a = startAngle + i * step;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(a) * rayLength, Math.sin(a) * rayLength);
+              ctx.stroke();
+            }
+          }
+
+          // Creature Body
+          ctx.rotate(c.dir);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Heading line
+          ctx.strokeStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(c.radius + 3, 0);
+          ctx.stroke();
+
+          ctx.restore();
+        });
+      }
+
+      ctx.restore();
+    }
+
+    // --- Controls & Inputs ---
+    document.getElementById("btnPause").onclick = () => ws.send(JSON.stringify({ type: "pause_toggle" }));
+    document.getElementById("btnSpeedUp").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "up" }));
+    document.getElementById("btnSpeedDown").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "down" }));
+    document.getElementById("btnUltra").onclick = () => ws.send(JSON.stringify({ type: "toggle_ultra" }));
+    document.getElementById("btnSave").onclick = () => ws.send(JSON.stringify({ type: "save_brains" }));
+    document.getElementById("btnSensors").onclick = () => {
+      showSensors = !showSensors;
+      document.getElementById("btnSensors").classList.toggle("btn-active", showSensors);
+    };
+
+    // Keyboard Shortcuts
+    window.addEventListener("keydown", (evt) => {
+      if (evt.target.tagName === "INPUT") return;
+      if (evt.code === "Space") { evt.preventDefault(); ws.send(JSON.stringify({ type: "pause_toggle" })); }
+      else if (evt.code === "ArrowRight" || evt.code === "ArrowUp") { ws.send(JSON.stringify({ type: "set_speed", direction: "up" })); }
+      else if (evt.code === "ArrowLeft" || evt.code === "ArrowDown") { ws.send(JSON.stringify({ type: "set_speed", direction: "down" })); }
+      else if (evt.code === "KeyS") { showSensors = !showSensors; document.getElementById("btnSensors").classList.toggle("btn-active", showSensors); }
+      else if (evt.code === "KeyU") { ws.send(JSON.stringify({ type: "toggle_ultra" })); }
+      else if (evt.code === "KeyP") { ws.send(JSON.stringify({ type: "print_population" })); }
+    });
+
+    // Pan & Zoom
+    viewport.addEventListener("mousedown", (e) => { isDragging = true; dragStart = { x: e.clientX - camera.x, y: e.clientY - camera.y }; });
+    window.addEventListener("mousemove", (e) => { if (isDragging) { camera.x = e.clientX - dragStart.x; camera.y = e.clientY - dragStart.y; } });
+    window.addEventListener("mouseup", () => isDragging = false);
+    viewport.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      camera.zoom = Math.max(0.2, Math.min(5, camera.zoom * zoomFactor));
+    });
+
+    // Tab Switching
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(`tab${tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)}`).classList.add("active");
+      };
+    });
+
+    // Constants Panel Generator
+    function renderConstantsPanel() {
+      const container = document.getElementById("constantsContainer");
+      container.innerHTML = "";
+
+      for (const [key, data] of Object.entries(liveConstants)) {
+        if (key.includes("NN_") || key.includes("GENOME_SIZE") || key.includes("METRIC_BOUNDS")) continue;
+
+        const div = document.createElement("div");
+        div.className = "constant-item";
+        div.innerHTML = `
+          <label title="${key}">${key}</label>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <span class="cat-tag cat-${data.category}">${data.category}</span>
+            <input type="text" value="${data.value}" data-key="${key}">
+          </div>
+        `;
+        const input = div.querySelector("input");
+        input.onchange = () => {
+          let val = input.value;
+          if (data.type === "float") val = parseFloat(val);
+          else if (data.type === "int") val = parseInt(val, 10);
+          ws.send(JSON.stringify({ type: "set_constant", key, value: val }));
+        };
+        container.appendChild(div);
+      }
+    }
+
+    // Modal
+    let pendingRestartKey = null;
+    let pendingRestartVal = null;
+    function promptRestartModal(key, val) {
+      pendingRestartKey = key;
+      pendingRestartVal = val;
+      document.getElementById("modalKey").innerText = key;
+      document.getElementById("restartModal").classList.add("open");
+    }
+    document.getElementById("btnCancelRestart").onclick = () => {
+      document.getElementById("restartModal").classList.remove("open");
+    };
+    document.getElementById("btnConfirmRestart").onclick = () => {
+      ws.send(JSON.stringify({ type: "set_constant", key: pendingRestartKey, value: pendingRestartVal, confirm_reset: true }));
+      ws.send(JSON.stringify({ type: "apply_restart" }));
+      document.getElementById("restartModal").classList.remove("open");
+    };
+  </script>
+</body>
+</html>

@@ -66,7 +66,6 @@ class Simulation:
         self.world: World = World(self.rng, active_species=cfg)
         self.running: bool = True
         self.ultra_mode: bool = False
-        self.ticks_since_render: int = 0
         self.speed_idx: int = 1  # Index 1 -> 1x speed in SPEED_MULTIPLIERS
         self.loaded_genomes: dict[type, list[np.ndarray]] | None = None
 

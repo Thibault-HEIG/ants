@@ -149,10 +149,15 @@ choice before implementing.
 
 ---
 
-## Performance and Optimization
+## Performance
 The project was built brick after brick. It might need a slight architecture change to maintain great performance.
+### Optimization
 - Run performance tests for rendering and computation to be able to scale.
 - Look for dead codes or missed reused methods to get a cleaner architecture.
+### Frames VS `dt`
+Frames are stricly reserved to the front-end.
+- Detect any frame-related logic and replace it with a dt logic.
+- Make me know which frame-related concept you changed or plan to change
 
 
 ## Explicit non-goals for this pass (do not implement, just don't block them)
