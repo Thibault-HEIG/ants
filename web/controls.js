@@ -372,27 +372,25 @@ document.addEventListener("DOMContentLoaded", () => {
   initChart();
   connectWS();
 
-  // Scroll Sync
-  const container = document.getElementById("scrollContainer");
-  const indicators = document.querySelectorAll(".indicator");
-  container.addEventListener('scroll', () => {
-    const idx = Math.round(container.scrollLeft / window.innerWidth);
-    indicators.forEach((ind, i) => ind.classList.toggle('active', i === idx));
-  });
-  indicators.forEach((ind, i) => {
-    ind.onclick = () => {
-      container.scrollTo({ left: i * window.innerWidth, behavior: 'smooth' });
-    };
-  });
+
 
   // Controls
-  document.getElementById("btnPause").onclick = () => ws.send(JSON.stringify({ type: "pause_toggle" }));
+  document.getElementById("btnPause").onclick = () => {
+    ws.send(JSON.stringify({ type: "pause_toggle" }));
+  };
   document.getElementById("btnSpeedUp").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "up" }));
   document.getElementById("btnSpeedDown").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "down" }));
   document.getElementById("btnUltra").onclick = () => ws.send(JSON.stringify({ type: "toggle_ultra" }));
   document.getElementById("btnSensors").onclick = () => {
     showSensors = !showSensors;
     document.getElementById("btnSensors").classList.toggle("btn-active", showSensors);
+  };
+  
+  const originalHandleSnapshot = handleSnapshot;
+  handleSnapshot = function(snap) {
+    originalHandleSnapshot(snap);
+    document.getElementById("btnPause").classList.toggle("btn-active", snap.paused);
+    document.getElementById("btnUltra").classList.toggle("btn-active", snap.ultra);
   };
   
   // Zoom
@@ -453,11 +451,21 @@ document.addEventListener("DOMContentLoaded", () => {
     showBanner("Restarting simulation to apply constants...", "restarting", 0);
   };
 
-  // Dragging
   const canvas = document.getElementById('simCanvas');
   canvas.addEventListener("mousedown", (e) => Renderer.startDrag(e));
   window.addEventListener("mousemove", (e) => Renderer.moveDrag(e));
   window.addEventListener("mouseup", () => Renderer.endDrag());
+
+  // Scroll to zoom
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      Renderer.zoomIn();
+    } else {
+      Renderer.zoomOut();
+    }
+    document.getElementById("zoomDisplay").innerText = Renderer.getZoomPercent();
+  }, { passive: false });
 
   // Keyboard Shortcuts
   window.addEventListener("keydown", (evt) => {

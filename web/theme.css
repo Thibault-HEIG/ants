@@ -43,8 +43,8 @@ body {
   background-color: var(--bg-soil);
   color: var(--text-main);
   font-family: var(--font-sans);
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }

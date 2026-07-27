@@ -54,6 +54,15 @@ window.Renderer = {
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, snap.world.width, snap.world.height);
 
+    // Pheromones
+    if (snap.pheromones && snap.pheromones.data) {
+      snap.pheromones.data.forEach(([gx, gy, strength]) => {
+        const cs = snap.pheromones.cellSize;
+        ctx.fillStyle = `rgba(255, 255, 138, ${Math.min(1.0, strength / 4)})`; // (strength / 4) for light color
+        ctx.fillRect(gx * cs, gy * cs, cs, cs);
+      });
+    }
+
     // Lakes
     if (snap.lakes) {
       snap.lakes.forEach(l => {
@@ -81,15 +90,6 @@ window.Renderer = {
           ctx.fill();
         }
         ctx.restore();
-      });
-    }
-
-    // Pheromones
-    if (snap.pheromones && snap.pheromones.data) {
-      snap.pheromones.data.forEach(([gx, gy, strength]) => {
-        const cs = snap.pheromones.cellSize;
-        ctx.fillStyle = `rgba(90, 158, 143, ${Math.min(0.6, strength * 1.5)})`;
-        ctx.fillRect(gx * cs, gy * cs, cs, cs);
       });
     }
 
@@ -134,9 +134,9 @@ window.Renderer = {
           // Top Fit Halo
           if (topIndices.includes(idx)) {
             ctx.strokeStyle = "#c4a35a";
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.arc(0, 0, c.radius + 5, 0, Math.PI * 2);
+            ctx.arc(0, 0, c.radius + 2, 0, Math.PI * 2);
             ctx.stroke();
           }
 
@@ -187,7 +187,7 @@ window.Renderer = {
           if (c.carrying && c.carriedType) {
             const carrySprite = c.carriedType === "sugar" ? sprites['sugar'] : sprites['seed'];
             if (carrySprite) {
-              ctx.drawImage(carrySprite, -c.radius/2, -c.radius/2, c.radius, c.radius);
+              ctx.drawImage(carrySprite, -2, -2, 4, 4);
             }
           }
           
@@ -200,13 +200,13 @@ window.Renderer = {
             const hpRatio = Math.max(0, c.hp / c.maxHp);
             const w = c.radius * 2;
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(-w/2, -c.radius - 6, w, 2);
+            ctx.fillRect(-w/2, -c.radius - 3, w, 2);
             
             if (hpRatio > 0.5) ctx.fillStyle = '#6fb87a';
             else if (hpRatio > 0.25) ctx.fillStyle = '#c4a35a';
             else ctx.fillStyle = '#c94a4a';
             
-            ctx.fillRect(-w/2, -c.radius - 6, w * hpRatio, 2);
+            ctx.fillRect(-w/2, -c.radius - 3, w * hpRatio, 2);
           }
           ctx.restore();
         });
