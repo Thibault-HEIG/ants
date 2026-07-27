@@ -19,7 +19,6 @@ import threading
 import websockets
 from typing import Any
 
-from core.live_config import LiveConfig
 from core.serialization import build_full_snapshot, build_aggregate_snapshot, encode
 from core.simulation import Simulation
 
@@ -82,23 +81,7 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
 
     msg_type = data.get("type")
 
-    if msg_type == "set_constant":
-        key = data.get("key")
-        value = data.get("value")
-        confirm = bool(data.get("confirm_reset", False))
-        res = LiveConfig().set(key, value, confirm_reset=confirm)
-        
-        # Send confirmation response back to sending client
-        response = {"type": "constant_update_result", **res}
-        await websocket.send(json.dumps(response))
-
-    elif msg_type == "apply_restart":
-        applied_keys = LiveConfig().apply_pending_restart()
-        SIMULATION.reset()
-        response = {"type": "restart_applied", "keys": applied_keys}
-        await websocket.send(json.dumps(response))
-
-    elif msg_type == "set_speed":
+    if msg_type == "set_speed":
         direction = data.get("direction")
         if direction == "up":
             SIMULATION.set_speed(SIMULATION.speed_idx + 1)
@@ -113,25 +96,52 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "toggle_ultra":
         SIMULATION.ultra_mode = not SIMULATION.ultra_mode
 
-    elif msg_type == "save_brains":
-        saved_file = SIMULATION.save_top_brains()
-        await websocket.send(json.dumps({"type": "info", "message": f"Saved top brains to {saved_file}"}))
+    elif msg_type == "save_full_state":
+        filename = data.get("filename")
+        notes = data.get("notes", "")
+        saved_file = SIMULATION.save_full_state(filename=filename, notes=notes)
+        await websocket.send(json.dumps({"type": "save_result", "ok": True, "path": saved_file}))
 
     elif msg_type == "print_population":
         SIMULATION._print_metric_recap()
 
     elif msg_type == "get_constants":
-        all_consts = LiveConfig().get_all()
+        import core.constants as const_mod
+        import species.ant_constants as ant_mod
+        import species.spider_constants as spider_mod
+        all_consts = {}
+        for mod in (const_mod, ant_mod, spider_mod):
+            for k in dir(mod):
+                if k.isupper() and not k.startswith("_"):
+                    val = getattr(mod, k)
+                    if isinstance(val, (int, float, str, bool)):
+                        all_consts[k] = {"value": val, "type": type(val).__name__}
         await websocket.send(json.dumps({"type": "constants_data", "constants": all_consts}))
+
+    elif msg_type == "load_save_data":
+        save_content = data.get("content")
+        if save_content:
+            import tempfile, os
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, dir='saves') as f:
+                json.dump(save_content, f)
+                temp_path = f.name
+            SIMULATION.load_from_save(temp_path)
+            os.unlink(temp_path)
+            await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
+
+    elif msg_type == "refresh_constants":
+        import sys, os
+        path = SIMULATION.refresh_constants()
+        await websocket.send(json.dumps({"type": "refreshing", "message": "Restarting with fresh constants..."}))
+        await asyncio.sleep(0.1)
+        os.execv(sys.executable, [sys.executable] + sys.argv + ["--load", path])
 
 
 async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = "/") -> None:
     CLIENTS.add(websocket)
     logger.info(f"Client connected: {websocket.remote_address}")
     
-    # Send initial constants registry on connect
-    all_consts = LiveConfig().get_all()
-    await websocket.send(json.dumps({"type": "constants_data", "constants": all_consts}))
+    # Frontend requests constants when needed
 
     try:
         async for message in websocket:
@@ -166,7 +176,8 @@ async def broadcast_loop() -> None:
     global SIMULATION, IS_PAUSED
 
     while True:
-        interval = float(LiveConfig().get("BROADCAST_INTERVAL") or 0.05)
+        from core.constants import BROADCAST_INTERVAL
+        interval = float(BROADCAST_INTERVAL)
         if CLIENTS and SIMULATION is not None:
             if SIMULATION.ultra_mode:
                 snapshot = build_aggregate_snapshot(SIMULATION.world, SIMULATION, IS_PAUSED)

@@ -427,6 +427,10 @@ class World:
         self.generation_counts[cls] += 1
         self.pheromone_grid.fill(0.0)
         self._pheromone_list = self.pheromone_grid.tolist()
+        
+        self.food_items = []
+        self.environment.food_sources.clear()
+        self.environment.source_cooldown = 0.0
 
     def _select_parent(self, creatures: list[Any], cls: type | None = None) -> Any:
         """Select a parent alternating 1/2 best individual, 1/2 random from top 20% best parents."""

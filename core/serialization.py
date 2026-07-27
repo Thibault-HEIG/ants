@@ -68,6 +68,16 @@ def _compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         avg_enemies = 0.0
         avg_computed_enemies = 0.0
         avg_lifetime = 0.0
+
+    best_tiles = max(SpeciesStats.max_metrics.get(species_name, {}).get("tiles_covered", 0.0), max((getattr(c, "tiles_covered", 0.0) for c in living), default=0.0))
+    best_release = max(SpeciesStats.max_metrics.get(species_name, {}).get("release_at_home_count", 0), max((getattr(c, "release_at_home_count", 0) for c in living), default=0))
+
+    if alive_count > 0:
+        avg_tiles = sum(getattr(c, "tiles_covered", 0.0) for c in living) / alive_count
+        avg_release = sum(getattr(c, "release_at_home_count", 0) for c in living) / alive_count
+    else:
+        avg_tiles = 0.0
+        avg_release = 0.0
         
     return {
         "alive": alive_count,
@@ -85,8 +95,11 @@ def _compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         "avgComputedEnemies": float(avg_computed_enemies),
         "bestLifetime": float(best_lifetime),
         "avgLifetime": float(avg_lifetime),
+        "bestTilesCovered": float(best_tiles),
+        "avgTilesCovered": float(avg_tiles),
+        "bestReleaseAtHome": int(best_release),
+        "avgReleaseAtHome": float(avg_release),
     }
-
 
 def _compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
     """Compute the actual max vs bound values for species metrics."""
@@ -188,13 +201,13 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         })
 
     grid = world.pheromone_grid
-    active_indices = np.where(grid > 0.01)
+    active_indices = np.where(grid > 0.005)
     ph_data = []
     for x, y in zip(active_indices[0], active_indices[1]):
         strength = float(grid[x, y])
         ph_data.append([int(x), int(y), round(strength, 2)])
     ph_data.sort(key=lambda x: x[2], reverse=True)
-    ph_data = ph_data[:500]
+    ph_data = ph_data[:1000]
 
     return {
         "type": "full",
