@@ -260,10 +260,7 @@ class Simulation:
         self.world.reset_with_genomes(genomes_by_species)
         print("[LOAD] Successfully started simulation from saved state.")
 
-    def refresh_constants(self) -> str:
-        """Save full state and return path for process restart."""
-        path = self.save_full_state(filename="_refresh_temp")
-        return path
+
 
     def reset(self) -> None:
         """Reset simulation world to initial state or loaded save."""

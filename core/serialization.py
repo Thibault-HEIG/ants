@@ -79,10 +79,14 @@ def _compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         avg_tiles = 0.0
         avg_release = 0.0
         
+    from core.constants import SPECIES_CONFIG
+    reproduction_mode = SPECIES_CONFIG.get(species_name, {}).get("reproduction_mode", "continuous").capitalize()
+
     return {
         "alive": alive_count,
         "maxPop": max_pop,
         "allTimeCount": all_time_count,
+        "evolutionMode": reproduction_mode,
         "bestFitness": float(best_fitness),
         "avgFitness": float(avg_fitness),
         "bestFood": int(best_food),

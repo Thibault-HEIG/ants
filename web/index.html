@@ -60,10 +60,6 @@
         <div class="viewport-container" id="viewport">
           <canvas id="simCanvas"></canvas>
           <div class="viewport-overlay">
-            <div class="overlay-card">
-              <span>Time: <strong id="timeDisplay">0.0s</strong></span>
-              <span>Gen: <strong id="genDisplay">1</strong></span>
-            </div>
             <div id="ultraBanner" class="overlay-card ultra-banner" style="display: none;">
               ⚡ ULTRA MODE ACTIVE (Render Disabled)
             </div>
@@ -71,37 +67,59 @@
         </div>
         <aside class="overview-panel">
           <div class="section-title">Ecosystem Overview</div>
+          <div class="stat-row"><span class="stat-label">Time</span><span id="timeDisplay" class="stat-val">0.0s</span>
+          </div>
+          <div class="stat-row" style="margin-bottom: 1rem;"><span class="stat-label">Generation</span><span
+              id="genDisplay" class="stat-val">1</span></div>
 
           <div class="species-card ant">
             <div class="species-name" style="color: var(--accent-ant);">
               🐜 Ants
               <span id="antAlive" class="stat-val">0/0</span>
             </div>
-            <div class="stat-row"><span class="stat-label">Best Fitness</span><span id="antBestFit"
-                class="stat-val">0.00</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Fitness</span><span id="antAvgFit"
-                class="stat-val">0.00</span></div>
-            <div class="stat-row"><span class="stat-label">Best Lifetime</span><span id="antBestLife"
-                class="stat-val">0.0s</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Lifetime</span><span id="antAvgLife"
-                class="stat-val">0.0s</span></div>
-            <div class="stat-row"><span class="stat-label">Most Food Eaten</span><span id="antBestFood"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Food Eaten</span><span id="antAvgFood"
-                class="stat-val">0.0</span></div>
-            <div class="stat-row"><span class="stat-label">Most Enemies</span><span id="antBestEnemies"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Enemies</span><span id="antAvgEnemies"
-                class="stat-val">0.0</span></div>
-            <div class="stat-row"><span class="stat-label">Most Tiles</span><span id="antBestTiles"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Tiles</span><span id="antAvgTiles"
-                class="stat-val">0.0</span></div>
-            <div class="stat-row"
-              style="border-top:1px solid var(--border-color);margin-top:0.25rem;padding-top:0.35rem;"><span
-                class="stat-label">Most Food Home</span><span id="antBestHomeFood" class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Food Home</span><span id="antAvgHomeFood"
-                class="stat-val">0.0</span></div>
+            <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
+                id="antEvoMode" class="stat-val">-</span></div>
+            <table class="metrics-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Best</th>
+                  <th>Avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fitness</td>
+                  <td id="antBestFit">0.00</td>
+                  <td id="antAvgFit">0.00</td>
+                </tr>
+                <tr>
+                  <td>Lifetime</td>
+                  <td id="antBestLife">0.0s</td>
+                  <td id="antAvgLife">0.0s</td>
+                </tr>
+                <tr>
+                  <td>Food Eaten</td>
+                  <td id="antBestFood">0</td>
+                  <td id="antAvgFood">0.0</td>
+                </tr>
+                <tr>
+                  <td>Enemies</td>
+                  <td id="antBestEnemies">0</td>
+                  <td id="antAvgEnemies">0.0</td>
+                </tr>
+                <tr>
+                  <td>Tiles</td>
+                  <td id="antBestTiles">0</td>
+                  <td id="antAvgTiles">0.0</td>
+                </tr>
+                <tr style="border-top: 1px solid var(--border-color);">
+                  <td>Food Home</td>
+                  <td id="antBestHomeFood">0</td>
+                  <td id="antAvgHomeFood">0.0</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div class="species-card spider">
@@ -109,26 +127,44 @@
               🕷 Spiders
               <span id="spiderAlive" class="stat-val">0/0</span>
             </div>
-            <div class="stat-row"><span class="stat-label">Best Fitness</span><span id="spiderBestFit"
-                class="stat-val">0.00</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Fitness</span><span id="spiderAvgFit"
-                class="stat-val">0.00</span></div>
-            <div class="stat-row"><span class="stat-label">Best Lifetime</span><span id="spiderBestLife"
-                class="stat-val">0.0s</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Lifetime</span><span id="spiderAvgLife"
-                class="stat-val">0.0s</span></div>
-            <div class="stat-row"><span class="stat-label">Most Food Eaten</span><span id="spiderBestFood"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Food Eaten</span><span id="spiderAvgFood"
-                class="stat-val">0.0</span></div>
-            <div class="stat-row"><span class="stat-label">Most Enemies</span><span id="spiderBestEnemies"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Enemies</span><span id="spiderAvgEnemies"
-                class="stat-val">0.0</span></div>
-            <div class="stat-row"><span class="stat-label">Most Tiles</span><span id="spiderBestTiles"
-                class="stat-val">0</span></div>
-            <div class="stat-row"><span class="stat-label">Avg Tiles</span><span id="spiderAvgTiles"
-                class="stat-val">0.0</span></div>
+            <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
+                id="spiderEvoMode" class="stat-val">-</span></div>
+            <table class="metrics-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Best</th>
+                  <th>Avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fitness</td>
+                  <td id="spiderBestFit">0.00</td>
+                  <td id="spiderAvgFit">0.00</td>
+                </tr>
+                <tr>
+                  <td>Lifetime</td>
+                  <td id="spiderBestLife">0.0s</td>
+                  <td id="spiderAvgLife">0.0s</td>
+                </tr>
+                <tr>
+                  <td>Food Eaten</td>
+                  <td id="spiderBestFood">0</td>
+                  <td id="spiderAvgFood">0.0</td>
+                </tr>
+                <tr>
+                  <td>Enemies</td>
+                  <td id="spiderBestEnemies">0</td>
+                  <td id="spiderAvgEnemies">0.0</td>
+                </tr>
+                <tr>
+                  <td>Tiles</td>
+                  <td id="spiderBestTiles">0</td>
+                  <td id="spiderAvgTiles">0.0</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </aside>
       </div>
@@ -138,8 +174,13 @@
     <section class="section section-analytics" id="sectionAnalytics">
       <div class="analytics-content">
         <h2 style="font-weight: 300;">Live Analytics</h2>
-        <div class="chart-container">
-          <canvas id="fitnessChart"></canvas>
+        <div class="charts">
+          <div class="chart-container fitnessChart">
+            <canvas id="fitnessChart"></canvas>
+          </div>
+          <div class="chart-container populationChart">
+            <canvas id="populationChart"></canvas>
+          </div>
         </div>
 
         <div class="bounds-container">
@@ -174,77 +215,66 @@
         </div>
       </div>
     </section>
+  </div>
 
-    <!-- Section 3: Constants -->
-    <section class="section section-constants" id="sectionConstants">
-      <div class="constants-content">
-        <div class="constants-header">
-          <h2 style="font-weight: 300;">Configuration Constants</h2>
-          <button class="btn" id="btnRefreshConstants">🔄 Refresh Changes</button>
+    <!-- Modals -->
+    <div id="controlsModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-title">Keyboard Shortcuts</div>
+        <div class="modal-body">
+          <table class="shortcut-table" style="width:100%; border:none;">
+            <tbody>
+              <tr>
+                <td class="mono">Space</td>
+                <td>Pause / Resume Simulation</td>
+              </tr>
+              <tr>
+                <td class="mono">↑ / →</td>
+                <td>Increase Simulation Speed</td>
+              </tr>
+              <tr>
+                <td class="mono">↓ / ←</td>
+                <td>Decrease Simulation Speed</td>
+              </tr>
+              <tr>
+                <td class="mono">S</td>
+                <td>Toggle sensor rays</td>
+              </tr>
+              <tr>
+                <td class="mono">U</td>
+                <td>Toggle Ultra Mode (Fast Exec)</td>
+              </tr>
+              <tr>
+                <td class="mono">P</td>
+                <td>Print Population Recap (Server Console)</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div id="constantsAccordion"></div>
-      </div>
-    </section>
-  </div>
-
-  <!-- Modals -->
-  <div id="controlsModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-title">Keyboard Shortcuts</div>
-      <div class="modal-body">
-        <table class="shortcut-table" style="width:100%; border:none;">
-          <tbody>
-            <tr>
-              <td class="mono">Space</td>
-              <td>Pause / Resume Simulation</td>
-            </tr>
-            <tr>
-              <td class="mono">↑ / →</td>
-              <td>Increase Simulation Speed</td>
-            </tr>
-            <tr>
-              <td class="mono">↓ / ←</td>
-              <td>Decrease Simulation Speed</td>
-            </tr>
-            <tr>
-              <td class="mono">S</td>
-              <td>Toggle sensor rays</td>
-            </tr>
-            <tr>
-              <td class="mono">U</td>
-              <td>Toggle Ultra Mode (Fast Exec)</td>
-            </tr>
-            <tr>
-              <td class="mono">P</td>
-              <td>Print Population Recap (Server Console)</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" id="btnCloseControls">Close</button>
+        <div class="modal-actions">
+          <button class="btn" id="btnCloseControls">Close</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div id="saveModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-title">Save Simulation State</div>
-      <div class="modal-body">
-        <input type="text" id="saveFilename" class="input-field" placeholder="Filename (e.g. 24-10-15-12-00)">
-        <textarea id="saveNotes" class="input-field" placeholder="Add notes about this save..."></textarea>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" id="btnCancelSave">Cancel</button>
-        <button class="btn" id="btnConfirmSave"
-          style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Save</button>
+    <div id="saveModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-title">Save Simulation State</div>
+        <div class="modal-body">
+          <input type="text" id="saveFilename" class="input-field" placeholder="Filename (e.g. 24-10-15-12-00)">
+          <textarea id="saveNotes" class="input-field" placeholder="Add notes about this save..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="btnCancelSave">Cancel</button>
+          <button class="btn" id="btnConfirmSave"
+            style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Save</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="renderer.js"></script>
-  <script src="controls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="renderer.js"></script>
+    <script src="controls.js"></script>
 </body>
 
 </html>

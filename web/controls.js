@@ -110,6 +110,32 @@ let lastSnapTime = performance.now();
 let fpsFrames = 0;
 let fpsVal = 0;
 
+// Chart State
+const STORAGE_KEY = "ants_world_chart_state";
+let chartState = {
+  history: [],
+  lastUpdateTime: -999.0,
+  maxTime: 300.0,
+  minFitness: 1.0,
+  maxFitness: 100.0,
+  maxPop: 100.0
+};
+let populationChart = null;
+
+// Try to load chart state from local storage
+try {
+  const cached = localStorage.getItem(STORAGE_KEY);
+  if (cached) {
+    const parsed = JSON.parse(cached);
+    if (parsed && parsed.history) {
+      chartState = parsed;
+      if (!chartState.maxPop) chartState.maxPop = 100.0;
+    }
+  }
+} catch (e) {
+  console.warn("Failed to load chart state from local storage", e);
+}
+
 function showBanner(text, type, duration = 3000) {
   const container = document.getElementById('bannerContainer');
   const banner = document.createElement('div');
@@ -154,22 +180,6 @@ function connectWS() {
 function handleMessage(msg) {
   if (msg.type === "full" || msg.type === "aggregate") {
     handleSnapshot(msg);
-  } else if (msg.type === "constants_data") {
-    liveConstants = msg.constants;
-    if (previousConstants) {
-      const changed = [];
-      for (const key in liveConstants) {
-        if (previousConstants[key] && previousConstants[key].value !== liveConstants[key].value) {
-          changed.push(key);
-        }
-      }
-      if (changed.length > 0) {
-        showBanner(`Successfully updated: ${changed.join(', ')}`, 'success', 5000);
-      }
-      previousConstants = null;
-      document.querySelector('.banner.restarting')?.remove();
-    }
-    renderConstants();
   } else if (msg.type === "save_result") {
     showBanner('State saved successfully', 'success');
   } else if (msg.type === "load_result") {
@@ -194,49 +204,130 @@ function handleSnapshot(snap) {
   document.getElementById("btnPause").innerHTML = snap.paused ? "▶ Resume" : "⏸ Pause";
   document.getElementById("ultraBanner").style.display = snap.ultra ? "flex" : "none";
 
-  if (snap.stats) {
-    if (snap.stats.Ant) {
-      const a = snap.stats.Ant;
-      document.getElementById("antAlive").innerText = `${a.alive}/${a.maxPop}`;
-      document.getElementById("antBestFit").innerText = (a.bestFitness || 0).toFixed(2);
-      document.getElementById("antAvgFit").innerText = (a.avgFitness || 0).toFixed(2);
-      document.getElementById("antBestLife").innerText = (a.bestLifetime || 0).toFixed(1) + "s";
-      document.getElementById("antAvgLife").innerText = (a.avgLifetime || 0).toFixed(1) + "s";
-      document.getElementById("antBestFood").innerText = a.bestComputedFood || a.bestFood || 0;
-      document.getElementById("antAvgFood").innerText = (a.avgComputedFood || a.avgFood || 0).toFixed(1);
-      document.getElementById("antBestEnemies").innerText = a.bestComputedEnemies || a.bestEnemies || 0;
-      document.getElementById("antAvgEnemies").innerText = (a.avgComputedEnemies || a.avgEnemies || 0).toFixed(1);
-      document.getElementById("antBestTiles").innerText = a.bestTilesCovered || 0;
-      document.getElementById("antAvgTiles").innerText = (a.avgTilesCovered || 0).toFixed(1);
-      document.getElementById("antBestHomeFood").innerText = a.bestReleaseAtHome || 0;
-      document.getElementById("antAvgHomeFood").innerText = (a.avgReleaseAtHome || 0).toFixed(1);
-    }
-    if (snap.stats.Spider) {
-      const s = snap.stats.Spider;
-      document.getElementById("spiderAlive").innerText = `${s.alive}/${s.maxPop}`;
-      document.getElementById("spiderBestFit").innerText = (s.bestFitness || 0).toFixed(2);
-      document.getElementById("spiderAvgFit").innerText = (s.avgFitness || 0).toFixed(2);
-      document.getElementById("spiderBestLife").innerText = (s.bestLifetime || 0).toFixed(1) + "s";
-      document.getElementById("spiderAvgLife").innerText = (s.avgLifetime || 0).toFixed(1) + "s";
-      document.getElementById("spiderBestFood").innerText = s.bestComputedFood || s.bestFood || 0;
-      document.getElementById("spiderAvgFood").innerText = (s.avgComputedFood || s.avgFood || 0).toFixed(1);
-      document.getElementById("spiderBestEnemies").innerText = s.bestComputedEnemies || s.bestEnemies || 0;
-      document.getElementById("spiderAvgEnemies").innerText = (s.avgComputedEnemies || s.avgEnemies || 0).toFixed(1);
-      document.getElementById("spiderBestTiles").innerText = s.bestTilesCovered || 0;
-      document.getElementById("spiderAvgTiles").innerText = (s.avgTilesCovered || 0).toFixed(1);
-    }
+    if (snap.stats) {
+      if (snap.stats.Ant) {
+        const a = snap.stats.Ant;
+        document.getElementById("antAlive").innerText = `${a.alive}/${a.maxPop}`;
+        document.getElementById("antEvoMode").innerText = a.evolutionMode || "-";
+        document.getElementById("antBestFit").innerText = (a.bestFitness !== undefined ? a.bestFitness : 0).toFixed(2);
+        document.getElementById("antAvgFit").innerText = (a.avgFitness !== undefined ? a.avgFitness : 0).toFixed(2);
+        document.getElementById("antBestLife").innerText = (a.bestLifetime !== undefined ? a.bestLifetime : 0).toFixed(1) + "s";
+        document.getElementById("antAvgLife").innerText = (a.avgLifetime !== undefined ? a.avgLifetime : 0).toFixed(1) + "s";
+        
+        const antBestFoodRaw = a.bestFood !== undefined ? a.bestFood : 0;
+        const antBestFoodComp = a.bestComputedFood !== undefined ? a.bestComputedFood.toFixed(1) : "0.0";
+        document.getElementById("antBestFood").innerText = `${antBestFoodRaw} (${antBestFoodComp})`;
+        const antAvgFoodRaw = a.avgFood !== undefined ? a.avgFood.toFixed(1) : "0.0";
+        const antAvgFoodComp = a.avgComputedFood !== undefined ? a.avgComputedFood.toFixed(1) : "0.0";
+        document.getElementById("antAvgFood").innerText = `${antAvgFoodRaw} (${antAvgFoodComp})`;
+        
+        const antBestEnemRaw = a.bestEnemies !== undefined ? a.bestEnemies : 0;
+        const antBestEnemComp = a.bestComputedEnemies !== undefined ? a.bestComputedEnemies.toFixed(1) : "0.0";
+        document.getElementById("antBestEnemies").innerText = `${antBestEnemRaw} (${antBestEnemComp})`;
+        const antAvgEnemRaw = a.avgEnemies !== undefined ? a.avgEnemies.toFixed(1) : "0.0";
+        const antAvgEnemComp = a.avgComputedEnemies !== undefined ? a.avgComputedEnemies.toFixed(1) : "0.0";
+        document.getElementById("antAvgEnemies").innerText = `${antAvgEnemRaw} (${antAvgEnemComp})`;
+        
+        document.getElementById("antBestTiles").innerText = a.bestTilesCovered !== undefined ? a.bestTilesCovered : 0;
+        document.getElementById("antAvgTiles").innerText = (a.avgTilesCovered !== undefined ? a.avgTilesCovered : 0).toFixed(1);
+        document.getElementById("antBestHomeFood").innerText = a.bestReleaseAtHome !== undefined ? a.bestReleaseAtHome : 0;
+        document.getElementById("antAvgHomeFood").innerText = (a.avgReleaseAtHome !== undefined ? a.avgReleaseAtHome : 0).toFixed(1);
+      }
+      if (snap.stats.Spider) {
+        const s = snap.stats.Spider;
+        document.getElementById("spiderAlive").innerText = `${s.alive}/${s.maxPop}`;
+        document.getElementById("spiderEvoMode").innerText = s.evolutionMode || "-";
+        document.getElementById("spiderBestFit").innerText = (s.bestFitness !== undefined ? s.bestFitness : 0).toFixed(2);
+        document.getElementById("spiderAvgFit").innerText = (s.avgFitness !== undefined ? s.avgFitness : 0).toFixed(2);
+        document.getElementById("spiderBestLife").innerText = (s.bestLifetime !== undefined ? s.bestLifetime : 0).toFixed(1) + "s";
+        document.getElementById("spiderAvgLife").innerText = (s.avgLifetime !== undefined ? s.avgLifetime : 0).toFixed(1) + "s";
+        
+        const spiderBestFoodRaw = s.bestFood !== undefined ? s.bestFood : 0;
+        const spiderBestFoodComp = s.bestComputedFood !== undefined ? s.bestComputedFood.toFixed(1) : "0.0";
+        document.getElementById("spiderBestFood").innerText = `${spiderBestFoodRaw} (${spiderBestFoodComp})`;
+        const spiderAvgFoodRaw = s.avgFood !== undefined ? s.avgFood.toFixed(1) : "0.0";
+        const spiderAvgFoodComp = s.avgComputedFood !== undefined ? s.avgComputedFood.toFixed(1) : "0.0";
+        document.getElementById("spiderAvgFood").innerText = `${spiderAvgFoodRaw} (${spiderAvgFoodComp})`;
+        
+        const spiderBestEnemRaw = s.bestEnemies !== undefined ? s.bestEnemies : 0;
+        const spiderBestEnemComp = s.bestComputedEnemies !== undefined ? s.bestComputedEnemies.toFixed(1) : "0.0";
+        document.getElementById("spiderBestEnemies").innerText = `${spiderBestEnemRaw} (${spiderBestEnemComp})`;
+        const spiderAvgEnemRaw = s.avgEnemies !== undefined ? s.avgEnemies.toFixed(1) : "0.0";
+        const spiderAvgEnemComp = s.avgComputedEnemies !== undefined ? s.avgComputedEnemies.toFixed(1) : "0.0";
+        document.getElementById("spiderAvgEnemies").innerText = `${spiderAvgEnemRaw} (${spiderAvgEnemComp})`;
+        
+        document.getElementById("spiderBestTiles").innerText = s.bestTilesCovered !== undefined ? s.bestTilesCovered : 0;
+        document.getElementById("spiderAvgTiles").innerText = (s.avgTilesCovered !== undefined ? s.avgTilesCovered : 0).toFixed(1);
+      }
 
-    if (fitnessChart && fitnessChart.data.labels.length > 0) {
-       fitnessChart.data.labels.push(snap.time.toFixed(1));
-       fitnessChart.data.datasets[0].data.push(snap.stats.Ant ? snap.stats.Ant.bestFitness : 0);
-       fitnessChart.data.datasets[1].data.push(snap.stats.Ant ? snap.stats.Ant.avgFitness : 0);
-       fitnessChart.data.datasets[2].data.push(snap.stats.Spider ? snap.stats.Spider.bestFitness : 0);
-       fitnessChart.data.datasets[3].data.push(snap.stats.Spider ? snap.stats.Spider.avgFitness : 0);
-       if (fitnessChart.data.labels.length > 200) {
-         fitnessChart.data.labels.shift();
-         fitnessChart.data.datasets.forEach(ds => ds.data.shift());
+    if (fitnessChart) {
+       const rt = snap.time;
+       
+       // Detect simulation reset (time went backwards)
+       if (rt < chartState.lastUpdateTime - 5.0) {
+         chartState = {
+           history: [],
+           lastUpdateTime: -999.0,
+           maxTime: 300.0,
+           minFitness: 1.0,
+           maxFitness: 100.0,
+         };
+         fitnessChart.data.datasets.forEach(ds => ds.data = []);
+         fitnessChart.update('none');
+         localStorage.removeItem(STORAGE_KEY);
        }
-       fitnessChart.update('none');
+
+       if (chartState.lastUpdateTime < 0 || (rt - chartState.lastUpdateTime) >= 10.0) {
+         const ab = snap.stats.Ant ? snap.stats.Ant.bestFitness : 0;
+         const aa = snap.stats.Ant ? snap.stats.Ant.avgFitness : 0;
+         const sb = snap.stats.Spider ? snap.stats.Spider.bestFitness : 0;
+         const sa = snap.stats.Spider ? snap.stats.Spider.avgFitness : 0;
+         
+         const ap = snap.stats.Ant ? snap.stats.Ant.alive : 0;
+         const sp = snap.stats.Spider ? snap.stats.Spider.alive : 0;
+         
+         chartState.history.push({ time: rt, ab, aa, sb, sa, ap, sp });
+         chartState.lastUpdateTime = rt;
+
+         let needsUpdate = false;
+         if (rt > chartState.maxTime * 0.98) {
+           chartState.maxTime = Math.max(chartState.maxTime * 2.0, rt * 1.2);
+           fitnessChart.options.scales.x.max = chartState.maxTime;
+           needsUpdate = true;
+         }
+         
+         const maxVal = Math.max(ab, aa, sb, sa);
+         if (maxVal > chartState.maxFitness * 0.98) {
+           chartState.maxFitness = Math.max(chartState.maxFitness * 1.5, maxVal * 1.2);
+           fitnessChart.options.scales.y.max = chartState.maxFitness;
+           needsUpdate = true;
+         }
+
+         const maxPopVal = Math.max(ap, sp);
+         if (maxPopVal > chartState.maxPop * 0.98) {
+           chartState.maxPop = Math.max(chartState.maxPop * 1.5, maxPopVal * 1.2);
+           populationChart.options.scales.y.max = chartState.maxPop;
+           needsUpdate = true;
+         }
+
+         fitnessChart.data.datasets[0].data.push({x: rt, y: Math.max(chartState.minFitness, ab)});
+         fitnessChart.data.datasets[1].data.push({x: rt, y: Math.max(chartState.minFitness, aa)});
+         fitnessChart.data.datasets[2].data.push({x: rt, y: Math.max(chartState.minFitness, sb)});
+         fitnessChart.data.datasets[3].data.push({x: rt, y: Math.max(chartState.minFitness, sa)});
+
+         populationChart.data.datasets[0].data.push({x: rt, y: ap});
+         populationChart.data.datasets[1].data.push({x: rt, y: sp});
+
+         fitnessChart.update('none');
+         populationChart.update('none');
+
+         // Cache state
+         try {
+           localStorage.setItem(STORAGE_KEY, JSON.stringify(chartState));
+         } catch (e) {
+           console.warn("Failed to cache chart state", e);
+         }
+       }
     }
   }
 
@@ -256,116 +347,88 @@ function renderBoundsTable(tbodyId, bounds) {
   for (const [metric, data] of Object.entries(bounds)) {
     const tr = document.createElement("tr");
     const isWarn = data.max > data.bound;
+    const isUnder = data.max < (0.5 * data.bound);
+    let statusHTML = '<span style="color:var(--success);">OK</span>';
+    if (isWarn) {
+      statusHTML = '<span style="color:var(--warning); font-weight:bold;">⚠️ Over</span>';
+    } else if (isUnder) {
+      statusHTML = '<span style="color:var(--warning); font-weight:bold;">‼️ Under</span>';
+    }
     tr.innerHTML = `
       <td>${metric}</td>
       <td class="mono">${data.max.toFixed(1)}</td>
       <td class="mono">${data.bound.toFixed(1)}</td>
-      <td>${isWarn ? '<span style="color:var(--warning); font-weight:bold;">⚠️ Over</span>' : '<span style="color:var(--success);">OK</span>'}</td>
+      <td>${statusHTML}</td>
     `;
     tbody.appendChild(tr);
   }
 }
 
-function initChart() {
-  const ctx = document.getElementById("fitnessChart").getContext("2d");
-  fitnessChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: ['0'],
-      datasets: [
-        { label: "Ant Best", borderColor: "#6fb87a", data: [0], borderWidth: 2, pointRadius: 0 },
-        { label: "Ant Avg", borderColor: "#4a7c59", borderDash: [4,4], data: [0], borderWidth: 1.5, pointRadius: 0 },
-        { label: "Spider Best", borderColor: "#c94a4a", data: [0], borderWidth: 2, pointRadius: 0 },
-        { label: "Spider Avg", borderColor: "#8c3a3a", borderDash: [4,4], data: [0], borderWidth: 1.5, pointRadius: 0 },
-      ]
-    },
+function createChart(ctx, datasets, typeY, minY, maxY) {
+  return new Chart(ctx, {
+    type: "scatter",
+    data: { datasets: datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
       scales: {
-        x: { display: false },
-        y: { type: 'logarithmic', grid: { color: "#3d3228" }, ticks: { color: "#9b8b7a" } }
+        x: { 
+          type: 'linear',
+          display: true, 
+          min: 0,
+          max: chartState.maxTime,
+          ticks: { 
+            color: "#9b8b7a",
+            maxTicksLimit: 10,
+            callback: function(value) { return value.toFixed(0) + 's'; }
+          }, 
+          grid: { color: "rgba(255,255,255,0.05)" }
+        },
+        y: { 
+          type: typeY, 
+          grid: { color: "#3d3228" }, 
+          ticks: { 
+            color: "#9b8b7a",
+            callback: function(value) {
+              if (typeY === 'logarithmic' && ![1, 10, 100, 1000, 10000].includes(value)) return null;
+              return value;
+            }
+          },
+          min: minY,
+          max: maxY
+        }
       },
       plugins: {
-        legend: { labels: { color: "#e8e0d4", font: { size: 12 } } }
+        legend: { 
+          labels: { color: "#e8e0d4", font: { size: 12 }, usePointStyle: true, boxWidth: 20 } 
+        },
+        tooltip: { enabled: false }
       }
     }
   });
 }
 
-function renderConstants() {
-  const container = document.getElementById("constantsAccordion");
-  container.innerHTML = "";
+function initChart() {
+  const ctxFit = document.getElementById("fitnessChart").getContext("2d");
+  const ctxPop = document.getElementById("populationChart").getContext("2d");
+  
+  const h = chartState.history;
+  const dsFit = [
+    { label: "Ant Best", borderColor: "#6fb87a", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.ab)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Ant Avg", borderColor: "#4a7c59", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.aa)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Spider Best", borderColor: "#c94a4a", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sb)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Spider Avg", borderColor: "#8c3a3a", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sa)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+  ];
+  
+  const dsPop = [
+    { label: "Ants", borderColor: "#6fb87a", data: h.map(d => ({x: d.time, y: d.ap})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(111, 184, 122, 0.1)" },
+    { label: "Spiders", borderColor: "#c94a4a", data: h.map(d => ({x: d.time, y: d.sp})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(201, 74, 74, 0.1)" }
+  ];
 
-  const groups = {
-    "World": [],
-    "Food": [],
-    "Combat": [],
-    "Evolution": [],
-    "Sensors": [],
-    "Neural Network": [],
-    "Ants": [],
-    "Spiders": []
-  };
-
-  for (const [key, data] of Object.entries(liveConstants)) {
-    let g = "World";
-    if (key.includes("FOOD") || key.includes("SUGAR") || key.includes("SEED") || key === 'EAT_PICKUP_RADIUS' || key === 'CARRY_SPEED_MULTIPLIER') g = "Food";
-    else if (key.includes("ATTACK") && !key.includes("ANT") && !key.includes("SPIDER") && !key.includes("FITNESS")) g = "Combat";
-    else if (key.includes("MUTATION") || key.includes("SELECTION") || key.includes("EXTINCTION") || key === 'GENERATION_DURATION') g = "Evolution";
-    else if (key.includes("SENSOR") && !key.includes("ANT") && !key.includes("SPIDER")) g = "Sensors";
-    else if (key.includes("NN_") || key === 'GENOME_SIZE' || key === 'STATE_INPUTS') g = "Neural Network";
-    else if (key.startsWith("ANT") || key.startsWith("MAX_ANT") || key.includes("PHEROMONE") || key.startsWith("DENSITY_RADIUS_ANT") || (key.startsWith("FITNESS") && !key.startsWith("SPIDER"))) g = "Ants";
-    else if (key.startsWith("SPIDER") || key.startsWith("MAX_SPIDER") || key.startsWith("DENSITY_RADIUS_SPIDER")) g = "Spiders";
-    
-    if (groups[g]) groups[g].push({key, data});
-  }
-
-  for (const [gName, items] of Object.entries(groups)) {
-    if (items.length === 0) continue;
-    
-    const grp = document.createElement("div");
-    grp.className = "accordion-group";
-    const isHighlighted = gName === "Evolution" || 
-      (items.some(i => i.key.includes('FITNESS')) && (gName === 'Ants' || gName === 'Spiders'));
-    if (isHighlighted) grp.classList.add("highlight-evolution");
-    
-    const header = document.createElement("div");
-    header.className = "accordion-header";
-    header.innerHTML = `<span>${isHighlighted ? '⭐ ' : ''}${gName}</span><span>▼</span>`;
-    
-    const body = document.createElement("div");
-    body.className = "accordion-body";
-    
-    header.onclick = () => {
-      body.classList.toggle("open");
-      header.innerHTML = `<span>${gName}</span><span>${body.classList.contains("open") ? "▲" : "▼"}</span>`;
-    };
-
-    items.forEach(item => {
-      const desc = CONSTANT_DESCRIPTIONS[item.key] || "";
-      const row = document.createElement("div");
-      row.className = "constant-row";
-      row.innerHTML = `
-        <div class="constant-info">
-          <span class="constant-name">${item.key}</span>
-          ${desc ? `<span class="constant-desc">${desc}</span>` : ""}
-        </div>
-        <div class="constant-val">${item.data.value}</div>
-      `;
-      body.appendChild(row);
-    });
-
-    grp.appendChild(header);
-    grp.appendChild(body);
-    container.appendChild(grp);
-  }
+  fitnessChart = createChart(ctxFit, dsFit, 'logarithmic', chartState.minFitness, chartState.maxFitness);
+  populationChart = createChart(ctxPop, dsPop, 'linear', 0, chartState.maxPop);
 }
-
-window.getConstant = function(key) {
-  return liveConstants[key] ? liveConstants[key].value : null;
-};
 
 document.addEventListener("DOMContentLoaded", () => {
   Renderer.init(document.getElementById('simCanvas'));
@@ -444,12 +507,6 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.value = "";
   };
 
-  // Constants Refresh
-  document.getElementById("btnRefreshConstants").onclick = () => {
-    previousConstants = JSON.parse(JSON.stringify(liveConstants));
-    ws.send(JSON.stringify({type: 'refresh_constants'}));
-    showBanner("Restarting simulation to apply constants...", "restarting", 0);
-  };
 
   const canvas = document.getElementById('simCanvas');
   canvas.addEventListener("mousedown", (e) => Renderer.startDrag(e));

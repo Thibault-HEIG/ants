@@ -105,19 +105,6 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "print_population":
         SIMULATION._print_metric_recap()
 
-    elif msg_type == "get_constants":
-        import core.constants as const_mod
-        import species.ant_constants as ant_mod
-        import species.spider_constants as spider_mod
-        all_consts = {}
-        for mod in (const_mod, ant_mod, spider_mod):
-            for k in dir(mod):
-                if k.isupper() and not k.startswith("_"):
-                    val = getattr(mod, k)
-                    if isinstance(val, (int, float, str, bool)):
-                        all_consts[k] = {"value": val, "type": type(val).__name__}
-        await websocket.send(json.dumps({"type": "constants_data", "constants": all_consts}))
-
     elif msg_type == "load_save_data":
         save_content = data.get("content")
         if save_content:
@@ -128,14 +115,6 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
             SIMULATION.load_from_save(temp_path)
             os.unlink(temp_path)
             await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
-
-    elif msg_type == "refresh_constants":
-        import sys, os
-        path = SIMULATION.refresh_constants()
-        await websocket.send(json.dumps({"type": "refreshing", "message": "Restarting with fresh constants..."}))
-        await asyncio.sleep(0.1)
-        os.execv(sys.executable, [sys.executable] + sys.argv + ["--load", path])
-
 
 async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = "/") -> None:
     CLIENTS.add(websocket)

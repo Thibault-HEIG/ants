@@ -80,12 +80,10 @@ header {
 }
 
 .overview-panel {
-  width: 320px;
-  flex-shrink: 0;
+  width: 350px;
   background: var(--bg-card);
   border-right: 1px solid var(--border-color);
-  padding: 1rem;
-  overflow-y: auto;
+  padding: 1rem 2rem 1rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -168,6 +166,31 @@ canvas:active {
   justify-content: space-between;
 }
 
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.metrics-table th, .metrics-table td {
+  padding: 0.25rem 0;
+  text-align: right;
+  border: none;
+}
+
+.metrics-table th:first-child, .metrics-table td:first-child {
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.metrics-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding-bottom: 0.5rem;
+}
+
 /* Analytics */
 .analytics-content {
   display: flex;
@@ -178,12 +201,26 @@ canvas:active {
   width: 100%;
 }
 
+.charts {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
 .chart-container {
   height: 400px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 1rem;
+
+  &.populationChart {
+    height: 350px;
+  }
+
+  &.fitnessChart {
+    height: 450px;
+  }
 }
 
 .bounds-container {
@@ -201,84 +238,6 @@ canvas:active {
   flex-direction: column;
   gap: 1.5rem;
 }
-
-.constants-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.accordion-group {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  margin-bottom: 1rem;
-  overflow: hidden;
-  background: var(--bg-card);
-}
-
-.accordion-group.highlight-evolution {
-  border-color: var(--accent-gold);
-}
-
-.accordion-header {
-  padding: 1rem;
-  background: rgba(0,0,0,0.1);
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-  user-select: none;
-}
-
-.accordion-body {
-  padding: 1rem;
-  display: none;
-  border-top: 1px solid var(--border-color);
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.accordion-body.open {
-  display: flex;
-}
-
-.constant-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem;
-  background: rgba(255,255,255,0.02);
-  border-radius: var(--radius-sm);
-}
-
-.constant-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.constant-name {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.constant-desc {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.constant-val {
-  font-family: var(--font-mono);
-  background: var(--bg-rock);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-}
-
 
 
 /* Modals & Banners */

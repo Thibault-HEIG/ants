@@ -221,7 +221,7 @@ window.Renderer = {
   },
 
   zoomOut() {
-    camera.zoom = Math.max(0.8, camera.zoom - 0.2);
+    camera.zoom = Math.max(0.3, camera.zoom - 0.2);
   },
 
   getZoomPercent() {
