@@ -90,23 +90,12 @@ class Simulation:
         cfg = self.species_config.get(cls, {})
         return bool(cfg.get("npc", getattr(cls, "npc", False)))
 
-    def save_full_state(self, filename: str | None = None, notes: str = "") -> str | None:
-        """Save full simulation state to a JSON file in saves/ directory."""
-        import json
-        import os
-        from datetime import datetime
+    def _build_constants_snapshot(self) -> dict:
+        """Collect all uppercase constants from core and species modules."""
         import core.constants as const_mod
         from species import ant_constants as ant_mod
         from species import spider_constants as spider_mod
-        from core.utils import SpeciesStats
 
-        os.makedirs("saves", exist_ok=True)
-        if filename is None:
-            filename = datetime.now().strftime("%y-%m-%d-%H-%M")
-        
-        filepath = os.path.join("saves", f"{filename}.json" if not filename.endswith(".json") else filename)
-
-        # Build constants snapshot
         const_snap = {}
         for mod in (const_mod, ant_mod, spider_mod):
             for k in dir(mod):
@@ -114,8 +103,12 @@ class Simulation:
                     val = getattr(mod, k)
                     if isinstance(val, (int, float, str, bool)):
                         const_snap[k] = val
+        return const_snap
 
-        stats_data = {
+    def _build_stats_snapshot(self) -> dict:
+        """Collect all SpeciesStats accumulator fields for serialization."""
+        from core.utils import SpeciesStats
+        return {
             "total_dead_count": dict(SpeciesStats.total_dead_count),
             "sum_dead_fitness": dict(SpeciesStats.sum_dead_fitness),
             "sum_dead_food": dict(SpeciesStats.sum_dead_food),
@@ -124,8 +117,25 @@ class Simulation:
             "sum_dead_computed_enemies": dict(SpeciesStats.sum_dead_computed_enemies),
             "sum_dead_lifetime": dict(SpeciesStats.sum_dead_lifetime),
             "max_fitness": dict(SpeciesStats.max_fitness),
-            "max_metrics": {k: dict(v) for k, v in SpeciesStats.max_metrics.items()}
+            "max_foodeaten": dict(SpeciesStats.max_foodeaten),
+            "max_enemies_touched": dict(SpeciesStats.max_enemies_touched),
+            "max_computed_food": dict(SpeciesStats.max_computed_food),
+            "max_computed_enemies": dict(SpeciesStats.max_computed_enemies),
+            "max_lifetime": dict(SpeciesStats.max_lifetime),
+            "max_metrics": {k: dict(v) for k, v in SpeciesStats.max_metrics.items()},
         }
+
+    def save_full_state(self, filename: str | None = None, notes: str = "") -> str | None:
+        """Save full simulation state to a JSON file in saves/ directory."""
+        import json
+        import os
+        from datetime import datetime
+
+        os.makedirs("saves", exist_ok=True)
+        if filename is None:
+            filename = datetime.now().strftime("%y-%m-%d-%H-%M")
+
+        filepath = os.path.join("saves", f"{filename}.json" if not filename.endswith(".json") else filename)
 
         gen_counts = {}
         for cls in self.active_species:
@@ -142,8 +152,8 @@ class Simulation:
                 "time": list(self.history_time),
                 "fitness": dict(self.history_fitness)
             },
-            "constants_snapshot": const_snap,
-            "stats": stats_data
+            "constants_snapshot": self._build_constants_snapshot(),
+            "stats": self._build_stats_snapshot(),
         }
 
         for cls in self.active_species:
@@ -151,7 +161,7 @@ class Simulation:
             living = self.world.creatures.get(cls, [])
             genomes = [c.genome.tolist() for c in living]
             cfg = self.species_config.get(cls, {})
-            
+
             save_data["species"][species_name] = {
                 "genomes": genomes,
                 "config": cfg
@@ -163,12 +173,18 @@ class Simulation:
         print(f"[SAVE] Saved full state ({sum(len(s['genomes']) for s in save_data['species'].values())} genomes) to {filepath}")
         return filepath
 
-    def load_from_save(self, filepath: str) -> None:
-        """Load genomes and state from a JSON save file."""
+    def load_from_save(self, filepath: str) -> dict | None:
+        """Load genomes and state from a JSON save file.
+
+        Expects the dict-based format produced by save_full_state().
+        Missing fields default to 0 or empty rather than raising.
+        If genome count < population target, fills with clones/mutated genomes.
+        """
         import json
         import os
         from evolution.genetics import mutate
         from core.utils import SpeciesStats
+        from core.constants import GENOME_SIZE
 
         actual_path = filepath
         if not os.path.exists(actual_path) and not actual_path.endswith(".json"):
@@ -184,8 +200,16 @@ class Simulation:
             print(f"[ERROR] Save file not found: {filepath}")
             return
 
-        with open(actual_path, "r") as f:
-            save_data = json.load(f)
+        try:
+            with open(actual_path, "r") as f:
+                save_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"[ERROR] Failed to read save file {actual_path}: {exc}")
+            return
+
+        if not isinstance(save_data, dict):
+            print(f"[ERROR] Save file is not in the expected JSON dict format: {actual_path}")
+            return
 
         print(f"[LOAD] Loading saved simulation from {actual_path}...")
 
@@ -195,58 +219,59 @@ class Simulation:
 
         genomes_by_species: dict[type, list[np.ndarray]] = {cls: [] for cls in self.active_species}
 
-        if isinstance(save_data, list):
-            # Backwards compatibility: old format
-            for item in save_data:
-                sp_name = item.get("species_name")
-                gen_list = item.get("genome")
-                if sp_name in species_map and gen_list is not None:
-                    cls = species_map[sp_name]
-                    genomes_by_species[cls].append(np.array(gen_list, dtype=float))
-        elif isinstance(save_data, dict):
-            # New format
-            if "species" in save_data:
-                for sp_name, sp_data in save_data["species"].items():
-                    if sp_name in species_map:
-                        cls = species_map[sp_name]
-                        genomes_list = sp_data.get("genomes", [])
-                        for g in genomes_list:
-                            genomes_by_species[cls].append(np.array(g, dtype=float))
-            
-            # Restore round_time
-            if "round_time" in save_data:
-                self.world.round_time = float(save_data["round_time"])
-            
-            # Restore generation_counts
-            if "generation_counts" in save_data:
-                for sp_name, count in save_data["generation_counts"].items():
-                    if sp_name in species_map:
-                        cls = species_map[sp_name]
-                        if hasattr(self.world, "generation_counts"):
-                            self.world.generation_counts[cls] = int(count)
+        # Parse genomes from "species" block
+        for sp_name, sp_data in save_data.get("species", {}).items():
+            if sp_name not in species_map:
+                continue
+            cls = species_map[sp_name]
+            for g in sp_data.get("genomes", []):
+                try:
+                    arr = np.array(g, dtype=float)
+                    if arr.shape == (GENOME_SIZE,):
+                        genomes_by_species[cls].append(arr)
+                except (ValueError, TypeError):
+                    continue
 
-            # Restore history
-            if "history" in save_data:
-                hist = save_data["history"]
-                self.history_time = hist.get("time", [])
-                self.history_fitness = hist.get("fitness", {getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species})
+        # Validate: at least one valid genome per active species
+        for cls in self.active_species:
+            sp_name = getattr(cls, "species_name", cls.__name__)
+            if len(genomes_by_species[cls]) == 0:
+                print(f"[ERROR] No valid genome found for {sp_name}")
 
-            # Restore stats
-            if "stats" in save_data:
-                stats = save_data["stats"]
-                SpeciesStats.total_dead_count = stats.get("total_dead_count", {})
-                SpeciesStats.sum_dead_fitness = stats.get("sum_dead_fitness", {})
-                SpeciesStats.sum_dead_food = stats.get("sum_dead_food", {})
-                SpeciesStats.sum_dead_computed_food = stats.get("sum_dead_computed_food", {})
-                SpeciesStats.sum_dead_enemies = stats.get("sum_dead_enemies", {})
-                SpeciesStats.sum_dead_computed_enemies = stats.get("sum_dead_computed_enemies", {})
-                SpeciesStats.sum_dead_lifetime = stats.get("sum_dead_lifetime", {})
-                SpeciesStats.max_fitness = stats.get("max_fitness", {})
-                SpeciesStats.max_metrics = stats.get("max_metrics", {})
-            else:
-                SpeciesStats.reset()
+        # Restore round_time
+        self.world.round_time = float(save_data.get("round_time", 0.0))
 
-        # Duplicate and mutate to fill target population
+        # Restore generation_counts
+        for sp_name, count in save_data.get("generation_counts", {}).items():
+            if sp_name in species_map:
+                cls = species_map[sp_name]
+                if hasattr(self.world, "generation_counts"):
+                    self.world.generation_counts[cls] = int(count)
+
+        # Restore history (default to empty)
+        hist = save_data.get("history", {})
+        self.history_time = hist.get("time", [])
+        self.history_fitness = hist.get("fitness",
+            {getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species})
+
+        # Restore stats — every field defaults to empty dict when absent
+        stats = save_data.get("stats", {})
+        SpeciesStats.total_dead_count = stats.get("total_dead_count", {})
+        SpeciesStats.sum_dead_fitness = stats.get("sum_dead_fitness", {})
+        SpeciesStats.sum_dead_food = stats.get("sum_dead_food", {})
+        SpeciesStats.sum_dead_computed_food = stats.get("sum_dead_computed_food", {})
+        SpeciesStats.sum_dead_enemies = stats.get("sum_dead_enemies", {})
+        SpeciesStats.sum_dead_computed_enemies = stats.get("sum_dead_computed_enemies", {})
+        SpeciesStats.sum_dead_lifetime = stats.get("sum_dead_lifetime", {})
+        SpeciesStats.max_fitness = stats.get("max_fitness", {})
+        SpeciesStats.max_foodeaten = stats.get("max_foodeaten", {})
+        SpeciesStats.max_enemies_touched = stats.get("max_enemies_touched", {})
+        SpeciesStats.max_computed_food = stats.get("max_computed_food", {})
+        SpeciesStats.max_computed_enemies = stats.get("max_computed_enemies", {})
+        SpeciesStats.max_lifetime = stats.get("max_lifetime", {})
+        SpeciesStats.max_metrics = stats.get("max_metrics", {})
+
+        # Fill genomes to match target population size via clones/mutation
         for cls, genomes in genomes_by_species.items():
             target = getattr(cls, "initial_count", 10)
             if len(genomes) > 0 and len(genomes) < target:
@@ -259,6 +284,7 @@ class Simulation:
         self.loaded_genomes = genomes_by_species
         self.world.reset_with_genomes(genomes_by_species)
         print("[LOAD] Successfully started simulation from saved state.")
+        return save_data.get("constants_snapshot", {})
 
 
 

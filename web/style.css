@@ -352,3 +352,28 @@ textarea.input-field {
 .shortcut-table td {
   padding: 0.5rem;
 }
+
+/* Reload Button */
+.reload-section {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0 1rem;
+}
+
+.btn-reload {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: rgba(90, 158, 143, 0.15);
+  border: 1px solid var(--accent-teal);
+  color: var(--accent-teal);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-reload:hover {
+  background: rgba(90, 158, 143, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(90, 158, 143, 0.2);
+}

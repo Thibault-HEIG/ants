@@ -112,15 +112,62 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, dir='saves') as f:
                 json.dump(save_content, f)
                 temp_path = f.name
-            SIMULATION.load_from_save(temp_path)
+            result = SIMULATION.load_from_save(temp_path)
             os.unlink(temp_path)
-            await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
+            if result is not None:
+                await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
+            else:
+                await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": "Failed to load save — check file format"}))
+
+    elif msg_type == "reload_with_changes":
+        import sys, os
+        try:
+            save_path = os.path.join("saves", "_reload_state.json")
+            SIMULATION.save_full_state(filename="_reload_state", notes="auto-reload")
+
+            await websocket.send(json.dumps({
+                "type": "reload_starting",
+                "ok": True,
+                "message": "Restarting server with code changes...",
+                "save_path": save_path,
+            }))
+            await asyncio.sleep(0.2)
+
+            # Strip existing --load/--path/-p args to avoid duplication on repeated reloads
+            clean_argv = []
+            skip_next = False
+            for arg in sys.argv:
+                if skip_next:
+                    skip_next = False
+                    continue
+                if arg in ("--load", "--path", "-p"):
+                    skip_next = True
+                    continue
+                if arg.startswith("--load=") or arg.startswith("--path="):
+                    continue
+                clean_argv.append(arg)
+
+            os.execv(sys.executable, [sys.executable] + clean_argv + ["--load", save_path])
+        except Exception as exc:
+            logger.error(f"Reload failed: {exc}")
+            await websocket.send(json.dumps({
+                "type": "reload_result",
+                "ok": False,
+                "message": f"The code update failed, try manual saving and reload",
+            }))
 
 async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = "/") -> None:
+    global RELOAD_RESULT
     CLIENTS.add(websocket)
     logger.info(f"Client connected: {websocket.remote_address}")
-    
-    # Frontend requests constants when needed
+
+    # Push pending reload result to the reconnecting client
+    if RELOAD_RESULT is not None:
+        try:
+            await websocket.send(json.dumps(RELOAD_RESULT))
+        except Exception:
+            pass
+        RELOAD_RESULT = None
 
     try:
         async for message in websocket:
@@ -170,10 +217,57 @@ async def broadcast_loop() -> None:
         await asyncio.sleep(interval)
 
 
+RELOAD_RESULT: dict | None = None
+
+
 def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = None) -> None:
-    global SIMULATION
+    global SIMULATION, RELOAD_RESULT
+    import os
+
+    is_reload = (load_path is not None and load_path.endswith("_reload_state.json"))
+    old_constants_snapshot = None
+
+    if is_reload and os.path.exists(load_path):
+        # Read the saved constants snapshot before we load (and potentially overwrite)
+        try:
+            with open(load_path, "r") as f:
+                import json as _json
+                saved = _json.load(f)
+                old_constants_snapshot = saved.get("constants_snapshot", {})
+        except Exception:
+            old_constants_snapshot = None
+
     SIMULATION = Simulation(load_path=load_path)
-    
+
+    if is_reload and old_constants_snapshot is not None:
+        # Compare old (saved) constants against current (freshly-imported) constants
+        current_constants = SIMULATION._build_constants_snapshot()
+        changed = []
+        for k, old_val in old_constants_snapshot.items():
+            new_val = current_constants.get(k)
+            if new_val is not None and new_val != old_val:
+                changed.append(k)
+        # Check for newly added constants
+        for k in current_constants:
+            if k not in old_constants_snapshot:
+                changed.append(k)
+
+        if changed:
+            RELOAD_RESULT = {
+                "type": "reload_result", "ok": True,
+                "message": f"Successfully updated the constants {', '.join(changed)}",
+            }
+        else:
+            RELOAD_RESULT = {
+                "type": "reload_result", "ok": True,
+                "message": "Server restarted — no constant changes detected",
+            }
+        # Clean up the temp reload save
+        try:
+            os.unlink(load_path)
+        except OSError:
+            pass
+
     http_port = start_http_server(host, port)
     logger.info(f"WebSocket Server starting at ws://{host}:{port}")
 

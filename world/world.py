@@ -105,11 +105,11 @@ class World:
             Spider: Kingdom("toile", Spider, np.array([self.width - 120.0, self.height - 120.0]), spawn_radius=60.0),
         }
 
-        # Phase 3: Lakes
+        # Phase 3: Lakes — positioned as % of world dimensions to adapt to map resizing
         self.lakes: list[Lake] = [
-            Lake(np.array([380.0, 420.0]), radius=50.0),
-            Lake(np.array([600.0, 240.0]), radius=55.0),
-            Lake(np.array([820.0, 560.0]), radius=50.0),
+            Lake(np.array([self.width * 0.24, self.height * 0.42]), radius=50.0),
+            Lake(np.array([self.width * 0.375, self.height * 0.24]), radius=55.0),
+            Lake(np.array([self.width * 0.51, self.height * 0.56]), radius=50.0),
         ]
 
         # Phase 4: Spatial Tile Grid & Pheromones (10x10 tiles)

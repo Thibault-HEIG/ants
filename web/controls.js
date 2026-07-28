@@ -157,6 +157,9 @@ function updateStatus(connected) {
   if (connected) {
     badge.className = "status-badge";
     text.innerText = "Connected";
+    // Clear stale banners from before reconnect (e.g. "restarting" banners)
+    const container = document.getElementById('bannerContainer');
+    container.querySelectorAll('.banner.restarting').forEach(b => b.remove());
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({type: 'get_constants'}));
     }
@@ -183,7 +186,13 @@ function handleMessage(msg) {
   } else if (msg.type === "save_result") {
     showBanner('State saved successfully', 'success');
   } else if (msg.type === "load_result") {
-    showBanner('State loaded successfully', 'success');
+    if (msg.ok) showBanner(msg.message || 'State loaded successfully', 'success');
+    else showBanner(msg.message || 'Load failed', 'error');
+  } else if (msg.type === "reload_starting") {
+    showBanner('⏳ Restarting server with code changes...', 'restarting', 0);
+  } else if (msg.type === "reload_result") {
+    if (msg.ok) showBanner(msg.message, 'success', 6000);
+    else showBanner(msg.message, 'error', 6000);
   }
 }
 
@@ -271,9 +280,12 @@ function handleSnapshot(snap) {
            maxTime: 300.0,
            minFitness: 1.0,
            maxFitness: 100.0,
+           maxPop: 100.0
          };
          fitnessChart.data.datasets.forEach(ds => ds.data = []);
+         populationChart.data.datasets.forEach(ds => ds.data = []);
          fitnessChart.update('none');
+         populationChart.update('none');
          localStorage.removeItem(STORAGE_KEY);
        }
 
@@ -293,6 +305,7 @@ function handleSnapshot(snap) {
          if (rt > chartState.maxTime * 0.98) {
            chartState.maxTime = Math.max(chartState.maxTime * 2.0, rt * 1.2);
            fitnessChart.options.scales.x.max = chartState.maxTime;
+           populationChart.options.scales.x.max = chartState.maxTime;
            needsUpdate = true;
          }
          
@@ -364,7 +377,7 @@ function renderBoundsTable(tbodyId, bounds) {
   }
 }
 
-function createChart(ctx, datasets, typeY, minY, maxY) {
+function createChart(ctx, datasets, typeY, minY, maxY, title) {
   return new Chart(ctx, {
     type: "scatter",
     data: { datasets: datasets },
@@ -400,6 +413,13 @@ function createChart(ctx, datasets, typeY, minY, maxY) {
         }
       },
       plugins: {
+        title: {
+          display: !!title,
+          text: title || '',
+          color: '#e8e0d4',
+          font: { size: 14, weight: '600' },
+          padding: { bottom: 10 }
+        },
         legend: { 
           labels: { color: "#e8e0d4", font: { size: 12 }, usePointStyle: true, boxWidth: 20 } 
         },
@@ -426,8 +446,8 @@ function initChart() {
     { label: "Spiders", borderColor: "#c94a4a", data: h.map(d => ({x: d.time, y: d.sp})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(201, 74, 74, 0.1)" }
   ];
 
-  fitnessChart = createChart(ctxFit, dsFit, 'logarithmic', chartState.minFitness, chartState.maxFitness);
-  populationChart = createChart(ctxPop, dsPop, 'linear', 0, chartState.maxPop);
+  fitnessChart = createChart(ctxFit, dsFit, 'logarithmic', chartState.minFitness, chartState.maxFitness, 'Fitness Tracking');
+  populationChart = createChart(ctxPop, dsPop, 'linear', 0, chartState.maxPop, 'Population History');
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -507,6 +527,12 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.value = "";
   };
 
+  // Reload with code changes
+  document.getElementById("btnReload").onclick = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "reload_with_changes" }));
+    }
+  };
 
   const canvas = document.getElementById('simCanvas');
   canvas.addEventListener("mousedown", (e) => Renderer.startDrag(e));

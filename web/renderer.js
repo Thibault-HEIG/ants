@@ -58,7 +58,9 @@ window.Renderer = {
     if (snap.pheromones && snap.pheromones.data) {
       snap.pheromones.data.forEach(([gx, gy, strength]) => {
         const cs = snap.pheromones.cellSize;
-        ctx.fillStyle = `rgba(255, 255, 138, ${Math.min(1.0, strength / 4)})`; // (strength / 4) for light color
+        // Progressive alpha: map 0.005–2.0 strength range to visible 0.08–1.0 alpha
+        const alpha = Math.min(1.0, 0.08 + (strength));
+        ctx.fillStyle = `rgba(255, 255, 138, ${alpha})`;
         ctx.fillRect(gx * cs, gy * cs, cs, cs);
       });
     }
