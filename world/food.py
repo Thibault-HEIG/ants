@@ -22,6 +22,8 @@ from core.constants import (
     FOOD_SOURCE_LIFETIME,
     FOOD_SOURCE_SPAWN_RATE,
     FOOD_SOURCE_SPAWN_RADIUS,
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
 )
 from world.entity import Entity
 
@@ -180,6 +182,11 @@ class FoodSource:
                 dist = self._rng.uniform(0, FOOD_SOURCE_SPAWN_RADIUS)
                 offset = np.array([np.cos(angle) * dist, np.sin(angle) * dist])
                 candidate = self.position + offset
+                
+                # Check map bounds
+                if not (0.0 <= candidate[0] <= WORLD_WIDTH and 0.0 <= candidate[1] <= WORLD_HEIGHT):
+                    continue
+                    
                 if not is_in_lake(candidate, float(FOOD_RADIUS), lakes) and not is_in_home(candidate, float(FOOD_RADIUS), kingdoms):
                     food_pos = candidate
                     break

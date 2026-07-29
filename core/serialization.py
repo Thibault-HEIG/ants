@@ -210,8 +210,6 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
     for x, y in zip(active_indices[0], active_indices[1]):
         strength = float(grid[x, y])
         ph_data.append([int(x), int(y), round(strength, 2)])
-    ph_data.sort(key=lambda x: x[2], reverse=True)
-    ph_data = ph_data[:1000]
 
     return {
         "type": "full",

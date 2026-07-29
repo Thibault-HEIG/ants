@@ -72,5 +72,7 @@ lives in code, not here.
 
 - `Creature` / `Entity` abstraction boundary stays intact.
 - `world/physics.py` and `evolution/sensors.py` never hardcode species types.
-- `rendering/renderer.py` is read-only: reads state, never mutates simulation logic.
+- `web/renderer.js` is read-only: renders from snapshot data, never mutates simulation state.
+- `server.py` owns the WebSocket broadcast loop and client message handling.
+  Simulation logic stays in `core/simulation.py` and `world/world.py`.
 - `core/simulation.py` is the only place species get registered/activated.

@@ -316,12 +316,16 @@ function handleSnapshot(snap) {
            needsUpdate = true;
          }
 
-         const maxPopVal = Math.max(ap, sp);
-         if (maxPopVal > chartState.maxPop * 0.98) {
-           chartState.maxPop = Math.max(chartState.maxPop * 1.5, maxPopVal * 1.2);
-           populationChart.options.scales.y.max = chartState.maxPop;
-           needsUpdate = true;
-         }
+          // Population chart max tracks the species population caps
+          const maxPopCap = Math.max(
+            snap.stats.Ant ? snap.stats.Ant.maxPop : 0,
+            snap.stats.Spider ? snap.stats.Spider.maxPop : 0
+          );
+          if (maxPopCap > 0 && maxPopCap !== chartState.maxPop) {
+            chartState.maxPop = maxPopCap;
+            populationChart.options.scales.y.max = maxPopCap;
+            needsUpdate = true;
+          }
 
          fitnessChart.data.datasets[0].data.push({x: rt, y: Math.max(chartState.minFitness, ab)});
          fitnessChart.data.datasets[1].data.push({x: rt, y: Math.max(chartState.minFitness, aa)});
@@ -377,7 +381,49 @@ function renderBoundsTable(tbodyId, bounds) {
   }
 }
 
-function createChart(ctx, datasets, typeY, minY, maxY, title) {
+// Square-root scale: spreads low values more than linear, less than log.
+class SqrtScale extends Chart.Scale {
+  constructor(cfg) {
+    super(cfg);
+    this._tickValues = [1, 5, 10, 20, 50, 100, 200, 300];
+  }
+
+  buildTicks() {
+    const maxVal = this.max || 300;
+    this.ticks = this._tickValues
+      .filter(v => v <= maxVal)
+      .map(v => ({ value: v }));
+    return this.ticks;
+  }
+
+  getPixelForValue(value) {
+    const min = this.min || 0;
+    const max = this.max || 300;
+    const sqrtMin = Math.sqrt(Math.max(0, min));
+    const sqrtMax = Math.sqrt(Math.max(0, max));
+    const sqrtVal = Math.sqrt(Math.max(0, value));
+    const ratio = (sqrtVal - sqrtMin) / (sqrtMax - sqrtMin || 1);
+    return this.getPixelForDecimal(ratio);
+  }
+
+  getValueForPixel(pixel) {
+    const min = this.min || 0;
+    const max = this.max || 300;
+    const sqrtMin = Math.sqrt(Math.max(0, min));
+    const sqrtMax = Math.sqrt(Math.max(0, max));
+    const decimal = this.getDecimalForPixel(pixel);
+    const sqrtVal = sqrtMin + decimal * (sqrtMax - sqrtMin);
+    return sqrtVal * sqrtVal;
+  }
+}
+SqrtScale.id = 'sqrt';
+SqrtScale.defaults = {
+  grid: { color: "#3d3228" },
+  ticks: { color: "#9b8b7a" }
+};
+Chart.register(SqrtScale);
+
+function createChart(ctx, datasets, yScaleConfig, title) {
   return new Chart(ctx, {
     type: "scatter",
     data: { datasets: datasets },
@@ -398,19 +444,7 @@ function createChart(ctx, datasets, typeY, minY, maxY, title) {
           }, 
           grid: { color: "rgba(255,255,255,0.05)" }
         },
-        y: { 
-          type: typeY, 
-          grid: { color: "#3d3228" }, 
-          ticks: { 
-            color: "#9b8b7a",
-            callback: function(value) {
-              if (typeY === 'logarithmic' && ![1, 10, 100, 1000, 10000].includes(value)) return null;
-              return value;
-            }
-          },
-          min: minY,
-          max: maxY
-        }
+        y: yScaleConfig
       },
       plugins: {
         title: {
@@ -446,8 +480,35 @@ function initChart() {
     { label: "Spiders", borderColor: "#c94a4a", data: h.map(d => ({x: d.time, y: d.sp})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(201, 74, 74, 0.1)" }
   ];
 
-  fitnessChart = createChart(ctxFit, dsFit, 'logarithmic', chartState.minFitness, chartState.maxFitness, 'Fitness Tracking');
-  populationChart = createChart(ctxPop, dsPop, 'linear', 0, chartState.maxPop, 'Population History');
+  const fitScaleConfig = {
+    type: 'logarithmic',
+    grid: { color: "#3d3228" },
+    ticks: {
+      color: "#9b8b7a",
+      callback: function(value) {
+        if (![1, 10, 100, 1000, 10000].includes(value)) return null;
+        return value;
+      }
+    },
+    min: chartState.minFitness,
+    max: chartState.maxFitness
+  };
+
+  const popScaleConfig = {
+    type: 'sqrt',
+    min: 0,
+    max: chartState.maxPop,
+    ticks: {
+      color: "#9b8b7a",
+      callback: function(value) {
+        return Number.isInteger(value) ? value : null;
+      }
+    },
+    grid: { color: "#3d3228" }
+  };
+
+  fitnessChart = createChart(ctxFit, dsFit, fitScaleConfig, 'Fitness Tracking');
+  populationChart = createChart(ctxPop, dsPop, popScaleConfig, 'Population History');
 }
 
 document.addEventListener("DOMContentLoaded", () => {

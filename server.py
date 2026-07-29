@@ -108,16 +108,20 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "load_save_data":
         save_content = data.get("content")
         if save_content:
-            import tempfile, os
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, dir='saves') as f:
-                json.dump(save_content, f)
-                temp_path = f.name
-            result = SIMULATION.load_from_save(temp_path)
-            os.unlink(temp_path)
-            if result is not None:
-                await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
-            else:
-                await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": "Failed to load save — check file format"}))
+            try:
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, dir='saves') as f:
+                    json.dump(save_content, f)
+                    temp_path = f.name
+                result = SIMULATION.load_from_save(temp_path)
+                os.unlink(temp_path)
+                if result is not None:
+                    await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
+                else:
+                    await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": "Failed to load save — check file format"}))
+            except Exception as exc:
+                logger.error(f"Load failed: {exc}")
+                await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": f"Load failed: {exc}"}))
 
     elif msg_type == "reload_with_changes":
         import sys, os
@@ -272,7 +276,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
     logger.info(f"WebSocket Server starting at ws://{host}:{port}")
 
     async def main_async():
-        async with websockets.serve(ws_handler, host, port):
+        async with websockets.serve(ws_handler, host, port, max_size=50 * 1024 * 1024):
             await asyncio.gather(
                 simulation_loop(),
                 broadcast_loop(),

@@ -2,7 +2,7 @@
 
 A real-time co-evolutionary simulation where **ants** and **spiders** each evolve neural-network brains through natural selection. No behaviour is hand-coded — all intelligence emerges from evolution alone.
 
-![Pygame](https://img.shields.io/badge/Pygame-2D%20Rendering-green) ![NumPy](https://img.shields.io/badge/NumPy-Neural%20Networks-blue) ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-yellow)
+![WebSocket](https://img.shields.io/badge/WebSocket-Headless%20Server-green) ![NumPy](https://img.shields.io/badge/NumPy-Neural%20Networks-blue) ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-yellow)
 
 ---
 
@@ -10,23 +10,16 @@ A real-time co-evolutionary simulation where **ants** and **spiders** each evolv
 
 ```bash
 # Install dependencies
-pip install numpy pygame
+pip install numpy websockets
 
-# Run the simulation
-python3 -m core.engine
+# Run the simulation server
+python3 main.py
+
+# Open the web interface
+# → http://localhost:8766
 ```
 
-### Controls
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` | Increase / decrease simulation speed (0.5×–256×) |
-| `Space` | Pause / unpause |
-| `S` | Toggle vision ray / sensor visualization |
-| `U` | Activate ultra performance mode (no rendering) |
-| `P` | Save top brains in a JSON file |
-| `F` | Print the fitness curve in the terminal |
-| `Escape` | Quit |
+The simulation runs headless on a Python WebSocket server. The browser connects automatically and streams real-time snapshots for rendering, charts, and controls.
 
 ---
 
@@ -246,74 +239,70 @@ fitness = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_not
 
 ---
 
-## Modular OOP Project Structure
-
-The codebase is engineered with strict Object-Oriented Programming (OOP) abstraction, modular package structures, and zero hardcoded class dependencies in the update loop:
+## Project Structure
 
 ```
 ants-world/
-├── assets/
-│   ├── ant.png              # Ant sprite
-│   ├── food.png             # Food sprite
-│   └── spider.png           # Spider sprite
+├── server.py                # WebSocket + HTTP server, simulation loop, broadcast
+├── main.py                  # Root entry point
+├── __main__.py              # Package entry point (python -m core.engine)
 ├── core/
-│   ├── __init__.py
-│   ├── engine.py            # Main application loop, Pygame input & event handling
-│   ├── simulation.py        # Top-level orchestrator & ACTIVE_SPECIES configuration
-│   ├── constants.py         # Global engine, window geometry & UI constants
-│   ├── utils.py             # Math helpers & dynamic SpeciesStats tracker
-│   └── main.py              # Convenience launcher alias
+│   ├── engine.py            # CLI argument parsing, launches server
+│   ├── simulation.py        # Top-level orchestrator, save/load, speed control
+│   ├── serialization.py     # Snapshot builder (full & aggregate) for WebSocket
+│   ├── constants.py         # Global constants & SPECIES_CONFIG
+│   └── utils.py             # Math helpers & SpeciesStats tracker
 ├── world/
-│   ├── __init__.py
-│   ├── world.py             # Dynamic arena container & entity lifecycle management
-│   ├── entity.py            # Abstract Entity base class for passive objects
-│   ├── food.py              # Concrete Food entity inheriting from Entity
-│   ├── physics.py           # Optimized SpatialHash & generic collision resolution
-│   └── environment.py       # EnvironmentSystem for dynamic food spawning & weather hooks
+│   ├── world.py             # Arena container & entity lifecycle
+│   ├── entity.py            # Abstract Entity base class
+│   ├── food.py              # Food entity
+│   ├── kingdom.py           # Kingdom (anthill / spider web)
+│   ├── obstacle.py          # Lake obstacles
+│   ├── grid.py              # Pheromone grid
+│   ├── physics.py           # SpatialHash & collision resolution
+│   └── environment.py       # Dynamic food source spawning
 ├── species/
-│   ├── __init__.py
-│   ├── creature.py          # Abstract Creature base class (spatial state, vitals, AI hooks)
-│   ├── ant.py               # Ant species implementation inheriting from Creature
-│   ├── ant_constants.py     # Dedicated Ant parameters & fitness weights
-│   ├── spider.py            # Spider species implementation inheriting from Creature
-│   └── spider_constants.py  # Dedicated Spider parameters & fitness weights
+│   ├── creature.py          # Abstract Creature base class
+│   ├── ant.py               # Ant species
+│   ├── ant_constants.py     # Ant parameters & fitness weights
+│   ├── spider.py            # Spider species
+│   └── spider_constants.py  # Spider parameters & fitness weights
 ├── evolution/
-│   ├── __init__.py
-│   ├── brain.py             # Neural network wrapper (87→16→8→6, genome decoding/encoding)
-│   ├── network.py           # Generic two-hidden-layer feedforward NeuralNetwork architecture
-│   ├── sensors.py           # 8-sector directional vision & density perception (species agnostic)
-│   └── genetics.py          # Truncation parent selection & Gaussian mutation algorithms
-├── rendering/
-│   ├── __init__.py
-│   ├── renderer.py          # Pygame visualization & dynamic sprite loader
-│   └── ui.py                # Top HUD overlays & miniature creature health bars
-├── main.py                  # Root entry point script
-├── __main__.py              # Package entry point (python -m ants_world or python .)
-└── README.md                # Project documentation
+│   ├── brain.py             # Neural network wrapper & genome codec
+│   ├── network.py           # Feedforward network (pure NumPy)
+│   ├── sensors.py           # Directional vision & density (species agnostic)
+│   └── genetics.py          # Selection & Gaussian mutation
+├── web/
+│   ├── index.html           # Single-page web interface
+│   ├── renderer.js          # Canvas 2D renderer (sprites, pheromones, creatures)
+│   ├── controls.js          # WebSocket client, charts, UI controls
+│   ├── style.css            # Layout & component styles
+│   └── theme.css            # Color palette & design tokens
+├── assets/                  # PNG sprites (ant, spider, anthill, toile, sugar, seed)
+├── saves/                   # JSON save files
+└── scripts/                 # Migration & conversion utilities
 ```
 
-### Module Dependency Graph
+### Architecture
 
 ```
-main.py / core.engine
- ├── core.simulation
- │    ├── world.world
- │    │    ├── world.physics (SpatialHash, combat & collision resolution)
- │    │    ├── world.environment (Dynamic food spawning & weather hooks)
- │    │    ├── species.ant ───────> species.creature ──> evolution.brain & evolution.sensors
- │    │    ├── species.spider ────> species.creature ──> evolution.brain & evolution.sensors
- │    │    ├── world.food ────────> world.entity
- │    │    └── evolution.genetics
- │    └── core.constants & core.utils
- └── rendering.renderer
-      └── rendering.ui
+core.engine (CLI) → server.py
+ ├── simulation_loop()          Async loop: physics steps at real-time speed
+ ├── broadcast_loop()           Async loop: serializes snapshots → WebSocket
+ ├── ws_handler()               Bidirectional: pause, speed, save, load, reload
+ └── HTTP static server          Serves web/ and assets/ on port+1
+
+Browser (web/)
+ ├── controls.js                WebSocket client, charts (Chart.js), UI
+ └── renderer.js                Canvas 2D rendering from snapshot data
 ```
 
-### Architectural Design Decisions
-- **`Creature` & `Entity` Abstractions**: All active agents inherit from `Creature`, while passive objects inherit from `Entity`. Common physics, vitals, neural hooks, and communication stubs live in the base classes.
-- **`SPECIES_CONFIG` Isolation Engine**: In `core/constants.py`, the `SPECIES_CONFIG` dict defines which species are active, their reproduction mode (`"continuous"` or `"generational"`), and whether they are NPCs. You can toggle a species on/off or switch its evolution mode without changing any loop logic.
-- **Generic Sensing & Collision Resolution**: `world/physics.py` and `evolution/sensors.py` never hardcode class names. Combat and vision checks identify opponents dynamically by comparing class types.
-- **Decoupled Renderer**: `rendering/renderer.py` operates in read-only mode and loads sprites dynamically based on `species_name`. If a PNG is missing, it falls back cleanly to geometric rendering.
+### Key Design Decisions
+- **Headless simulation**: The Python process runs no GUI. All rendering happens in the browser via Canvas 2D, driven by JSON snapshots over WebSocket.
+- **Hot reload**: The web UI can trigger `reload_with_changes` which saves state, re-executes the Python process with updated code, and restores the simulation seamlessly.
+- **`Creature` & `Entity` abstractions**: Active agents inherit from `Creature`, passive objects from `Entity`. The update loop never branches on species name.
+- **`SPECIES_CONFIG`**: Single registration point in `core/constants.py` for toggling species, reproduction mode, and NPC status.
+- **Species-agnostic sensing & physics**: `world/physics.py` and `evolution/sensors.py` identify opponents by class comparison, never by name.
 
 ---
 
@@ -322,6 +311,6 @@ main.py / core.engine
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `numpy` | ≥1.20 | Neural network math, vector operations |
-| `pygame` | ≥2.0 | Rendering, input handling, game loop |
+| `websockets` | ≥10.0 | Async WebSocket server for client communication |
 
-No other dependencies. No ML frameworks.
+The web frontend uses vanilla HTML/JS/CSS with Chart.js loaded from CDN. No build step, no ML frameworks.

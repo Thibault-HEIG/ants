@@ -283,6 +283,9 @@ class Simulation:
 
         self.loaded_genomes = genomes_by_species
         self.world.reset_with_genomes(genomes_by_species)
+        # reset_with_genomes zeros round_time; restore the saved value so
+        # sim_time and generation (derived from round_time) survive loads.
+        self.world.round_time = float(save_data.get("round_time", 0.0))
         print("[LOAD] Successfully started simulation from saved state.")
         return save_data.get("constants_snapshot", {})
 

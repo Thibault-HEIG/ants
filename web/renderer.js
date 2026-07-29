@@ -58,8 +58,8 @@ window.Renderer = {
     if (snap.pheromones && snap.pheromones.data) {
       snap.pheromones.data.forEach(([gx, gy, strength]) => {
         const cs = snap.pheromones.cellSize;
-        // Progressive alpha: map 0.005–2.0 strength range to visible 0.08–1.0 alpha
-        const alpha = Math.min(1.0, 0.08 + (strength));
+        // Linear opacity: strength [0, 2] maps to alpha [0, 0.6]
+        const alpha = strength * 0.3;
         ctx.fillStyle = `rgba(255, 255, 138, ${alpha})`;
         ctx.fillRect(gx * cs, gy * cs, cs, cs);
       });
@@ -219,11 +219,11 @@ window.Renderer = {
   },
 
   zoomIn() {
-    camera.zoom = Math.min(5.0, camera.zoom + 0.2);
+    camera.zoom = Math.min(3.0, camera.zoom * 1.15);
   },
 
   zoomOut() {
-    camera.zoom = Math.max(0.3, camera.zoom - 0.2);
+    camera.zoom = Math.max(0.5, camera.zoom / 1.15);
   },
 
   getZoomPercent() {
