@@ -192,7 +192,7 @@ class World:
         self.round_time += dt
 
         # Phase 0.5: Decay ant pheromone grid
-        from species.ant_constants import PHEROMONE_STRENGTH, PHEROMONE_DURATION
+        from species.ant_constants import PHEROMONE_STRENGTH, PHEROMONE_DURATION, PHEROMONE_MAX_STRENGTH
         decay_amount = (PHEROMONE_STRENGTH / PHEROMONE_DURATION) * dt
         np.maximum(self.pheromone_grid - decay_amount, 0.0, out=self.pheromone_grid)
         self._pheromone_list = self.pheromone_grid.tolist()

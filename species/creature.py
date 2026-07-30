@@ -146,6 +146,9 @@ class Creature(ABC):
         self._prev_home_distance: float | None = None
         self.take_signal: bool = False
         self.release_signal: bool = False
+        self.make_signal: bool = False
+        self._pheromone_cooldown_timer: float = 0.0
+        self.released_pheromone_around_food_source: float = 0.0
 
         self.record_current_tile()
 
@@ -265,6 +268,10 @@ class Creature(ABC):
         eat_signal = brain_output[3]
         take_signal = brain_output[4]
         release_signal = brain_output[5]
+        make_signal = brain_output[6]
+
+        # --- Pheromone cooldown (decremented regardless of action state) ---
+        self._pheromone_cooldown_timer = max(0.0, self._pheromone_cooldown_timer - dt)
 
         # --- Action state machine (priority: attack > eat > take > release) ---
         # While carrying: can't attack, eat, or take. Can only move + release.
@@ -275,6 +282,7 @@ class Creature(ABC):
             self.eat_timer = 0.0
             self.take_signal = False
             self.release_signal = bool(release_signal > 0.5)
+            self.make_signal = bool(make_signal > 0.5)
 
             # Movement (reduced speed already applied via CARRY_SPEED_MULTIPLIER)
             self.direction += turn_signal * self._turn_rate * dt
@@ -300,6 +308,7 @@ class Creature(ABC):
             self.attack_timer = 0.0
             self.take_signal = False
             self.release_signal = False
+            self.make_signal = False
             # eat_timer expiry is handled by physics.resolve_food_collisions
         else:
             # Check if creature wants to start eating
@@ -311,6 +320,7 @@ class Creature(ABC):
                 self.attack_timer = 0.0
                 self.take_signal = False
                 self.release_signal = False
+                self.make_signal = False
             else:
                 # Normal movement and combat
                 if self.is_attacking:
@@ -323,6 +333,7 @@ class Creature(ABC):
 
                 self.take_signal = bool(take_signal > 0.5)
                 self.release_signal = False  # nothing to release
+                self.make_signal = bool(make_signal > 0.5)
 
                 self.direction += turn_signal * self._turn_rate * dt
                 self.direction = normalize_angle(self.direction)

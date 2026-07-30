@@ -58,8 +58,8 @@ window.Renderer = {
     if (snap.pheromones && snap.pheromones.data) {
       snap.pheromones.data.forEach(([gx, gy, strength]) => {
         const cs = snap.pheromones.cellSize;
-        // Linear opacity: strength [0, 2] maps to alpha [0, 0.6]
-        const alpha = strength * 0.3;
+        // Linear opacity: strength [0, 1] maps to alpha [0, 0.6]
+        const alpha = strength * 0.6;
         ctx.fillStyle = `rgba(255, 255, 138, ${alpha})`;
         ctx.fillRect(gx * cs, gy * cs, cs, cs);
       });

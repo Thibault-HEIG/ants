@@ -64,7 +64,7 @@ Combat uses **Reach vs Hurtbox** mechanics — damage is dealt when a creature a
 
 ## Neural Network Architecture
 
-Each creature has an identical `87 → 16 → 8 → 6` fully-connected neural network (tanh activations, two hidden layers, no ML libraries — pure NumPy).
+Each creature has an identical `87 → 16 → 8 → 7` fully-connected neural network (tanh activations, two hidden layers, no ML libraries — pure NumPy).
 
 ### 87 Inputs
 
@@ -114,7 +114,7 @@ Each sensor outputs 9 values:
 | 85 | `home_angle` | [-1, 1] | 🏰 Navigation (relative angle to kingdom/home ÷ π) |
 | 86 | `is_at_home` | {0, 1} | 🏰 Navigation (1 = within kingdom spawn radius) |
 
-### 6 Outputs
+### 7 Outputs
 
 | Output | Range | Meaning |
 |--------|-------|---------|
@@ -124,13 +124,14 @@ Each sensor outputs 9 values:
 | `eat` | {0, 1} | 0 = don't eat, 1 = attempt to eat |
 | `take` | {0, 1} | 0 = don't take, 1 = attempt to pick up an item within range |
 | `release` | {0, 1} | 0 = don't release, 1 = attempt to drop/deliver carried item |
+| `make` | {0, 1} | 0 = make nothing, 1 = drop pheromones (ants only) |
 
 ### Genome
 
-The genome is a flat vector of **1598 floats** — every weight and bias concatenated:
+The genome is a flat vector of **~1500-2000 floats** — every weight and bias concatenated:
 
 ```
-[w_input→hidden1 (1392)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (48)] [b_output (6)]
+[w_input→hidden1 (1392)] [b_hidden1 (16)] [w_hidden1→hidden2 (128)] [b_hidden2 (8)] [w_hidden2→output (48)] [b_output (7)]
 ```
 
 ---
