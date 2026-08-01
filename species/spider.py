@@ -36,6 +36,10 @@ from species.spider_constants import (
     FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT,
     FITNESS_TILES_COVERED_WEIGHT,
     FITNESS_BRAIN_ORIGINALITY_WEIGHT,
+    CAN_ATTACK,
+    CAN_TAKE,
+    CAN_MAKE,
+    CAN_EAT,
 )
 
 
@@ -82,6 +86,10 @@ class Spider(Creature):
             sensor_range=SPIDER_SENSOR_RANGE,
             sensor_angle=SPIDER_SENSOR_ANGLE,
             density_radius=DENSITY_RADIUS_SPIDER,
+            can_attack=CAN_ATTACK,
+            can_take=CAN_TAKE,
+            can_make=CAN_MAKE,
+            can_eat=CAN_EAT,
         )
 
     def get_effective_max_speed(self, zone: float) -> float:

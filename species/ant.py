@@ -50,6 +50,10 @@ from species.ant_constants import (
     FITNESS_RELEASE_ANYWHERE_WEIGHT,
     FITNESS_RELEASE_AT_HOME_WEIGHT,
     FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT,
+    CAN_ATTACK,
+    CAN_TAKE,
+    CAN_MAKE,
+    CAN_EAT,
 )
 
 # Pre-computed normalisation constant for pheromone-near-food distance scoring
@@ -99,6 +103,10 @@ class Ant(Creature):
             sensor_range=ANT_SENSOR_RANGE,
             sensor_angle=ANT_SENSOR_ANGLE,
             density_radius=DENSITY_RADIUS_ANT,
+            can_attack=CAN_ATTACK,
+            can_take=CAN_TAKE,
+            can_make=CAN_MAKE,
+            can_eat=CAN_EAT,
         )
 
     def get_effective_max_speed(self, zone: float) -> float:

@@ -238,15 +238,9 @@ class Simulation:
             if len(genomes_by_species[cls]) == 0:
                 print(f"[ERROR] No valid genome found for {sp_name}")
 
-        # Restore round_time
-        self.world.round_time = float(save_data.get("round_time", 0.0))
-
-        # Restore generation_counts
-        for sp_name, count in save_data.get("generation_counts", {}).items():
-            if sp_name in species_map:
-                cls = species_map[sp_name]
-                if hasattr(self.world, "generation_counts"):
-                    self.world.generation_counts[cls] = int(count)
+        # Reset round_time and gen_count (ignored on load)
+        self.world.round_time = 0.0
+        self.world.generation_counts[cls] = 0
 
         # Restore history (default to empty)
         hist = save_data.get("history", {})
@@ -283,9 +277,6 @@ class Simulation:
 
         self.loaded_genomes = genomes_by_species
         self.world.reset_with_genomes(genomes_by_species)
-        # reset_with_genomes zeros round_time; restore the saved value so
-        # sim_time and generation (derived from round_time) survive loads.
-        self.world.round_time = float(save_data.get("round_time", 0.0))
         print("[LOAD] Successfully started simulation from saved state.")
         return save_data.get("constants_snapshot", {})
 

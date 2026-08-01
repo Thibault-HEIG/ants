@@ -75,7 +75,17 @@ class Creature(ABC):
         sensor_range: float | None = None,
         sensor_angle: float | None = None,
         density_radius: float | None = None,
+        can_attack: bool = True,
+        can_take: bool = True,
+        can_make: bool = True,
+        can_eat: bool = True,
     ) -> None:
+        # --- Action capabilities ---
+        self.can_attack: bool = can_attack
+        self.can_take: bool = can_take
+        self.can_make: bool = can_make
+        self.can_eat: bool = can_eat
+
         # --- Spatial state ---
         self.position: np.ndarray = position.astype(float)
         self.direction: float = rng.uniform(-math.pi, math.pi)
@@ -269,6 +279,15 @@ class Creature(ABC):
         take_signal = brain_output[4]
         release_signal = brain_output[5]
         make_signal = brain_output[6]
+
+        if not self.can_attack:
+            attack_signal = 0.0
+        if not self.can_eat:
+            eat_signal = 0.0
+        if not self.can_take:
+            take_signal = 0.0
+        if not self.can_make:
+            make_signal = 0.0
 
         # --- Pheromone cooldown (decremented regardless of action state) ---
         self._pheromone_cooldown_timer = max(0.0, self._pheromone_cooldown_timer - dt)
