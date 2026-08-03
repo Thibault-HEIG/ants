@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from core.constants import GENERATION_DURATION, WORLD_HEIGHT, WORLD_WIDTH
+from core.constants import FRAMES_PER_DT, GENERATION_DURATION, WORLD_HEIGHT, WORLD_WIDTH
 from core.utils import SpeciesStats
 
 
@@ -215,7 +215,11 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         "type": "full",
         "time": world.round_time,
         "generation": int(world.round_time / GENERATION_DURATION) + 1,
-        "speed": getattr(simulation, "speed_multiplier", 1.0),
+        "speed": getattr(simulation, "actual_multiplier", 1.0),
+        "targetMultiplier": getattr(simulation, "target_multiplier", 1.0),
+        "actualMultiplier": getattr(simulation, "actual_multiplier", 1.0),
+        "framesPerDt": FRAMES_PER_DT,
+        "multiplierCapped": getattr(simulation, "multiplier_capped", False),
         "ultra": getattr(simulation, "ultra_mode", False),
         "paused": paused,
         "world": {"width": WORLD_WIDTH, "height": WORLD_HEIGHT},
@@ -255,7 +259,11 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
         "type": "aggregate",
         "time": world.round_time,
         "generation": int(world.round_time / GENERATION_DURATION) + 1,
-        "speed": getattr(simulation, "speed_multiplier", 1.0),
+        "speed": getattr(simulation, "actual_multiplier", 1.0),
+        "targetMultiplier": getattr(simulation, "target_multiplier", 1.0),
+        "actualMultiplier": getattr(simulation, "actual_multiplier", 1.0),
+        "framesPerDt": FRAMES_PER_DT,
+        "multiplierCapped": getattr(simulation, "multiplier_capped", False),
         "ultra": True,
         "paused": paused,
         "stats": stats_dict,

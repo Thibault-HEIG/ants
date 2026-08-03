@@ -184,21 +184,74 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = 
 
 
 async def simulation_loop() -> None:
-    """Async loop running simulation physics step at real-time speeds."""
+    """Async loop that attempts to tick at a smooth target FPS (e.g. 30 Hz).
+    
+    Instead of calculating a full `dt` (which causes visual jumping at 1x speed),
+    we accumulate how many `steps` we should run this tick to reach the user's `target_multiplier`.
+    If compute takes longer than the tick budget, the actual multiplier is capped.
+    Ultra mode ignores the tick budget and processes frames in bulk as fast as possible.
+    """
+    import time as _time
+    from core.constants import FRAMES_PER_DT
+
     global SIMULATION, IS_PAUSED
-    base_dt = 1.0 / 60.0
+
+    target_fps = 30.0
+    tick_budget = 1.0 / target_fps
+    frame_dt = 1.0 / FRAMES_PER_DT  # 0.0333s of sim-time per frame
+    
+    steps_accumulator = 0.0
 
     while True:
-        if SIMULATION is not None and SIMULATION.running and not IS_PAUSED:
-            dt = base_dt * SIMULATION.speed_multiplier
-            max_step = 0.1
-            remaining = dt
-            while remaining > 0 and SIMULATION.running:
-                step_dt = min(remaining, max_step)
-                SIMULATION.step(step_dt)
-                remaining -= step_dt
-        
-        await asyncio.sleep(base_dt)
+        if SIMULATION is None or not SIMULATION.running or IS_PAUSED:
+            await asyncio.sleep(0.05)
+            continue
+
+        target = SIMULATION.target_multiplier
+        ultra = SIMULATION.ultra_mode
+
+        t0 = _time.monotonic()
+
+        if ultra:
+            # Run in massive batches for raw speed, bypassing standard accumulators
+            batch_size = max(int(target * FRAMES_PER_DT), 100)
+            for _ in range(batch_size):
+                if not SIMULATION.running or IS_PAUSED:
+                    break
+                SIMULATION.step(frame_dt)
+            
+            compute_time = _time.monotonic() - t0
+            SIMULATION.actual_multiplier = round(batch_size / (FRAMES_PER_DT * max(compute_time, 1e-9)), 1)
+            SIMULATION.multiplier_capped = False
+            # Yield to event loop to allow broadcast and receiving WS messages
+            await asyncio.sleep(0)
+            continue
+
+        # Normal mode: Add `target` steps to the accumulator per tick
+        # (Since we try to run 30 ticks per real second, this yields `target * 30` steps per sec)
+        steps_accumulator += target
+        steps_this_tick = int(steps_accumulator)
+        steps_accumulator -= steps_this_tick
+
+        for _ in range(steps_this_tick):
+            if not SIMULATION.running or IS_PAUSED:
+                break
+            SIMULATION.step(frame_dt)
+
+        compute_time = _time.monotonic() - t0
+
+        if compute_time >= tick_budget:
+            # CPU couldn't finish the batch within the 33ms budget (ceiling hit)
+            # Throughput = steps computed / (time taken * frames per sim-second)
+            if compute_time > 0:
+                SIMULATION.actual_multiplier = round(steps_this_tick / (FRAMES_PER_DT * compute_time), 1)
+            SIMULATION.multiplier_capped = True
+            await asyncio.sleep(0)
+        else:
+            # We finished early, we are exactly on schedule
+            SIMULATION.actual_multiplier = target
+            SIMULATION.multiplier_capped = False
+            await asyncio.sleep(tick_budget - compute_time)
 
 
 async def broadcast_loop() -> None:

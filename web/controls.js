@@ -110,6 +110,7 @@ let lastSnapTime = performance.now();
 let fpsFrames = 0;
 let fpsVal = 0;
 
+
 // Chart State
 const STORAGE_KEY = "ants_world_chart_state";
 let chartState = {
@@ -198,6 +199,7 @@ function handleMessage(msg) {
 
 function handleSnapshot(snap) {
   latestSnapshot = snap;
+
   const now = performance.now();
   fpsFrames++;
   if (now - lastSnapTime >= 1000) {
@@ -209,7 +211,14 @@ function handleSnapshot(snap) {
 
   document.getElementById("timeDisplay").innerText = snap.time.toFixed(1) + "s";
   document.getElementById("genDisplay").innerText = snap.generation;
-  document.getElementById("speedDisplay").innerText = snap.speed + "x";
+
+  // Speed display: just the target multiplier
+  const target = snap.targetMultiplier !== undefined ? snap.targetMultiplier : snap.speed;
+  const actual = snap.actualMultiplier !== undefined ? snap.actualMultiplier : snap.speed;
+
+  document.getElementById("speedDisplay").innerText = target + "x";
+  document.getElementById("actualDtDisplay").innerText = "Actual dt: " + Math.round(actual) + "x";
+
   document.getElementById("btnPause").innerHTML = snap.paused ? "▶ Resume" : "⏸ Pause";
   document.getElementById("ultraBanner").style.display = snap.ultra ? "flex" : "none";
 

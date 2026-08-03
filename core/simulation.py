@@ -67,6 +67,8 @@ class Simulation:
         self.running: bool = True
         self.ultra_mode: bool = False
         self.speed_idx: int = 1  # Index 1 -> 1x speed in SPEED_MULTIPLIERS
+        self.actual_multiplier: float = 1.0  # What the backend can actually sustain
+        self.multiplier_capped: bool = False  # True when backend can't keep up
         self.loaded_genomes: dict[type, list[np.ndarray]] | None = None
 
         # Track historical peak populations spawned per species
@@ -292,12 +294,17 @@ class Simulation:
         self._record_fitness_stat()
 
     @property
-    def speed_multiplier(self) -> float:
-        """Current simulation speed multiplier."""
+    def target_multiplier(self) -> float:
+        """User-requested simulation speed multiplier."""
         return SPEED_MULTIPLIERS[self.speed_idx]
 
+    @property
+    def speed_multiplier(self) -> float:
+        """Effective simulation speed (actual_multiplier). Backward compat."""
+        return self.actual_multiplier
+
     def set_speed(self, idx: int) -> None:
-        """Set speed multiplier index, clamped to valid bounds."""
+        """Set target speed multiplier index, clamped to valid bounds."""
         self.speed_idx = max(0, min(idx, len(SPEED_MULTIPLIERS) - 1))
 
     def step(self, dt: float) -> None:
