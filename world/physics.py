@@ -134,7 +134,10 @@ def resolve_combat(
                     hit_any = True
 
             if not hit_any:
+                hp_pct = max(0.0, min(attacker.health / attacker.max_health, 1.0))
+                computed_increment = 2.0 - 2.0 * hp_pct # Between 0.0 and 2.0, scaled by health percentage
                 attacker.times_attacking_for_nothing += 1
+                attacker.computed_times_attacking_for_nothing += computed_increment
 
             attacker.is_attacking = False
             attacker.attack_timer = 0.0

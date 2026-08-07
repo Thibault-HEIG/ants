@@ -129,6 +129,7 @@ class Creature(ABC):
         self.distance_walked: float = 0.0
         self.times_eating_for_nothing: int = 0
         self.times_attacking_for_nothing: int = 0
+        self.computed_times_attacking_for_nothing: float = 0.0
         self.follow_pheromones: float = 0.0
         self.brain_originality: float = 0.0
         self.world: Any | None = None
@@ -417,7 +418,7 @@ class Creature(ABC):
     def eat(self, food_value: float) -> None:
         """Consume food and restore health up to maximum health, updating raw and computed food scores."""
         hp_pct = clamp(self.health / self.max_health, 0.0, 1.0)
-        computed_increment = 3.0 - 4.0 * hp_pct  # score between -1.0 and 3.0 (avg 1.0)
+        computed_increment = 2.0 - 2.0 * hp_pct  # score between 0.0 and 2.0 (avg 1.0)
         self.health = min(self.health + food_value, self.max_health)
         self.food_eaten += 1
         self.computed_food_eaten += computed_increment
