@@ -44,8 +44,8 @@ The 1000×900 arena is divided into two zones:
 
 | Zone | Location | Properties |
 |------|----------|------------|
-| **Ants' Zone** (green) | Left half | More food spawns (66%). |
-| **Spiders' Zone** (red) | Right half | Ants move slower here. Less food spawns (33%). |
+| **Ants' Zone** (green) | Left half | More food spawns. |
+| **Spiders' Zone** (red) | Right half | Ants move slower here. Less food spawns. |
 
 ### Species Comparison
 
@@ -53,7 +53,7 @@ The 1000×900 arena is divided into two zones:
 |-----------|--------|-----------|
 | Population | cap: 300 | cap: 100 |
 | Initial Health | 100 HP | 300 HP |
-| Speed | 150 px/s | 80 px/s |
+| Max Speed | 150 px/s | 80 px/s |
 | Damage | 50 | 80 |
 | Attack Cost | 20 HP/s | 30 HP/s |
 | Sensor Range | 100 px | 150 px |
@@ -223,20 +223,34 @@ If total extinction occurs with no dead pool (first-generation edge case), fresh
 
 Every gene is mutated with Gaussian noise (mean, σ). There is no crossover — children are mutated clones of a single parent. Each mode has its own `MUTATION_RATE` and `MUTATION_STRENGTH` constants (`CONTINUOUS_*` / `GENERATIONAL_*`).
 
-### Fitness Function (to optimize)
+### Reward System (Fitness)
 
-Used for ranking and parent selection. Fitness is calculated directly from raw performance metrics (survival time, food consumed, and combat engagements):
+Used for ranking and parent selection. Fitness is calculated by normalizing raw performance metrics against maximum expected bounds, multiplying them by configured weights, and finally applying an originality bonus to encourage diverse behaviors.
+
+#### 1. Metrics & Normalization
+Each raw performance metric is bounded to normalize its value. This prevents time-based units from dominating count-based or score-based units.
+
+**Each specie have its very own bounds and weights**.
+
+- **Positive Rewards**: Survival time, tiles covered, food eaten, enemies touched, following pheromones, taking objects, walking towards home with an object, releasing an object at home (major bonus), and releasing pheromones around food sources.
+- **Penalties**: Times eating for nothing, times attacking for nothing, walking away from home with an object, releasing an object anywhere
+
+#### 2. Weights
+After normalization, each metric is multiplied by a specific weight. This allows manual shaping of the evolutionary process.
+
+#### 3. Final Fitness Formula
+The sum of all weighted metrics creates the base score. Finally, an `originality_multiplier` (based on brain genome uniqueness compared to the population) is applied to prevent the species from getting stuck in a local evolutionary minimum.
 
 ```python
-# Ants
-fitness = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_home + walk_opposite + release_anywhere + release_at_home) * originality_multiplier
+# Pseudocode of the computed score
+normalized_score = min(raw_metric / max_bound, 1.0)
+base_fitness += normalized_score * metric_weight
 
-# Spiders
-fitness = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + survival_time + tiles_covered) * originality_multiplier
+final_fitness = base_fitness * originality_multiplier
 ```
 
 > [!NOTE]
-> Each parameter has an attributed weight which is often changed to try to optimize intelligence manually.
+> The weights and bounds are defined separately in `species/ant_constants.py` and `species/spider_constants.py`.
 
 ---
 
