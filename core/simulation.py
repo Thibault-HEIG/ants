@@ -18,6 +18,22 @@ from species.ant import Ant
 from species.spider import Spider
 from world.world import World
 
+# Per-ability metrics tracked at snapshot time (read-only, no per-frame cost).
+# Spider lacks pheromone/carry behaviors so those fields stay zero — omitted.
+TRAINING_METRICS: dict[str, list[str]] = {
+    "Ant": [
+        "times_eating_for_nothing", "computed_food_eaten",
+        "computed_times_attacking_for_nothing", "computed_enemies_touched",
+        "follow_pheromones", "released_pheromone_around_food_source",
+        "walk_with_object_in_opposite_home_direction",
+        "release_at_home_count", "walk_with_object_in_home_direction",
+    ],
+    "Spider": [
+        "times_eating_for_nothing", "computed_food_eaten",
+        "computed_times_attacking_for_nothing", "computed_enemies_touched",
+    ],
+}
+
 # ---------------------------------------------------------------------------
 # Resolve SPECIES_CONFIG name strings → class objects
 # ---------------------------------------------------------------------------
@@ -81,6 +97,8 @@ class Simulation:
         self.history_fitness: dict[str, list[float]] = {
             getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species
         }
+        # Per-ability best+avg training signal history (same cadence as history_fitness)
+        self.history_training: dict[str, dict[str, list[float]]] = self._make_empty_training_history()
         self._plot_timer: float = 0.0
         self._record_fitness_stat()
 
@@ -91,6 +109,19 @@ class Simulation:
         """Return True if species cls is configured as an NPC (non-evolving)."""
         cfg = self.species_config.get(cls, {})
         return bool(cfg.get("npc", getattr(cls, "npc", False)))
+
+    def _make_empty_training_history(self) -> dict[str, dict[str, list[float]]]:
+        """Build a fresh per-ability training history dict for all active species."""
+        result: dict[str, dict[str, list[float]]] = {}
+        for cls in self.active_species:
+            name = getattr(cls, "species_name", cls.__name__)
+            metrics = TRAINING_METRICS.get(name, [])
+            series: dict[str, list[float]] = {}
+            for m in metrics:
+                series[f"{m}_best"] = []
+                series[f"{m}_avg"] = []
+            result[name] = series
+        return result
 
     def _build_constants_snapshot(self) -> dict:
         """Collect all uppercase constants from core and species modules."""
@@ -152,7 +183,8 @@ class Simulation:
             "species": {},
             "history": {
                 "time": list(self.history_time),
-                "fitness": dict(self.history_fitness)
+                "fitness": dict(self.history_fitness),
+                "training": {k: dict(v) for k, v in self.history_training.items()}
             },
             "constants_snapshot": self._build_constants_snapshot(),
             "stats": self._build_stats_snapshot(),
@@ -240,15 +272,13 @@ class Simulation:
             if len(genomes_by_species[cls]) == 0:
                 print(f"[ERROR] No valid genome found for {sp_name}")
 
-        # Reset round_time and gen_count (ignored on load)
-        self.world.round_time = 0.0
-        self.world.generation_counts[cls] = 0
-
         # Restore history (default to empty)
         hist = save_data.get("history", {})
         self.history_time = hist.get("time", [])
         self.history_fitness = hist.get("fitness",
             {getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species})
+        self.history_training = hist.get("training",
+            self._make_empty_training_history())
 
         # Restore stats — every field defaults to empty dict when absent
         stats = save_data.get("stats", {})
@@ -279,6 +309,14 @@ class Simulation:
 
         self.loaded_genomes = genomes_by_species
         self.world.reset_with_genomes(genomes_by_species)
+
+        # Restore round_time and gen_count (when reload with code changes)
+        if save_data.get("notes") == "auto-reload":
+            self.world.round_time = float(save_data["round_time"])
+            for cls in self.active_species:
+                sp_name = getattr(cls, "species_name", cls.__name__)
+                self.world.generation_counts[cls] = save_data["generation_counts"].get(sp_name, 0)
+
         print("[LOAD] Successfully started simulation from saved state.")
         return save_data.get("constants_snapshot", {})
 
@@ -290,6 +328,9 @@ class Simulation:
         self.history_time.clear()
         for series in self.history_fitness.values():
             series.clear()
+        for species_series in self.history_training.values():
+            for series in species_series.values():
+                series.clear()
         self._plot_timer = 0.0
         self._record_fitness_stat()
 
@@ -352,7 +393,7 @@ class Simulation:
         self.total_spawned[Spider] = value
 
     def _record_fitness_stat(self) -> None:
-        """Record current average fitness for each active species."""
+        """Record current average fitness and per-ability training metrics for each active species."""
         self.history_time.append(round(self.world.round_time, 1))
         for cls in self.active_species:
             name = getattr(cls, "species_name", cls.__name__)
@@ -364,6 +405,25 @@ class Simulation:
             if name not in self.history_fitness:
                 self.history_fitness[name] = []
             self.history_fitness[name].append(round(avg_fit, 2))
+
+            # Per-ability training metrics: best + avg over living population
+            training = self.history_training.get(name, {})
+            for metric in TRAINING_METRICS.get(name, []):
+                if living:
+                    values = [float(getattr(c, metric, 0.0)) for c in living]
+                    best_val = max(values)
+                    avg_val = sum(values) / len(values)
+                else:
+                    best_val = 0.0
+                    avg_val = 0.0
+                best_key = f"{metric}_best"
+                avg_key = f"{metric}_avg"
+                if best_key not in training:
+                    training[best_key] = []
+                if avg_key not in training:
+                    training[avg_key] = []
+                training[best_key].append(round(best_val, 2))
+                training[avg_key].append(round(avg_val, 2))
 
     def plot_fitness_curves(self) -> None:
         """Draw historical average fitness curves for all species in the terminal using plotext."""

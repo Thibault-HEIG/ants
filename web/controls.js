@@ -105,6 +105,7 @@ let liveConstants = {};
 let previousConstants = null;
 let showSensors = false;
 let fitnessChart = null;
+let activeTabId = 'tab-live-analytics';
 
 let lastSnapTime = performance.now();
 let fpsFrames = 0;
@@ -122,6 +123,10 @@ let chartState = {
   maxPop: 100.0
 };
 let populationChart = null;
+
+// Training chart instances keyed by canvas ID
+let trainingCharts = {};
+let trainingNeedsRedraw = { 'tab-ants-training': true, 'tab-spiders-training': true };
 
 // Try to load chart state from local storage
 try {
@@ -296,6 +301,7 @@ function handleSnapshot(snap) {
          fitnessChart.update('none');
          populationChart.update('none');
          localStorage.removeItem(STORAGE_KEY);
+         resetTrainingCharts();
        }
 
        if (chartState.lastUpdateTime < 0 || (rt - chartState.lastUpdateTime) >= 10.0) {
@@ -354,6 +360,17 @@ function handleSnapshot(snap) {
            console.warn("Failed to cache chart state", e);
          }
        }
+    }
+  }
+
+  // Update training charts — only for the visible tab, mark others for redraw
+  if (snap.trainingHistory) {
+    if (activeTabId === 'tab-ants-training' || activeTabId === 'tab-spiders-training') {
+      updateTrainingCharts(snap);
+      trainingNeedsRedraw[activeTabId] = false;
+    } else {
+      trainingNeedsRedraw['tab-ants-training'] = true;
+      trainingNeedsRedraw['tab-spiders-training'] = true;
     }
   }
 
@@ -478,10 +495,10 @@ function initChart() {
   
   const h = chartState.history;
   const dsFit = [
-    { label: "Ant Best", borderColor: "#6fb87a", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.ab)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
-    { label: "Ant Avg", borderColor: "#4a7c59", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.aa)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
-    { label: "Spider Best", borderColor: "#c94a4a", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sb)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
-    { label: "Spider Avg", borderColor: "#8c3a3a", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sa)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Ant Best", borderColor: "#6fb87a", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.ab)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Ant Avg", borderColor: "#4a7c59", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.aa)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Spider Best", borderColor: "#c94a4a", borderDash: [4,4], data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sb)})), borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+    { label: "Spider Avg", borderColor: "#8c3a3a", data: h.map(d => ({x: d.time, y: Math.max(chartState.minFitness, d.sa)})), borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
   ];
   
   const dsPop = [
@@ -520,10 +537,147 @@ function initChart() {
   populationChart = createChart(ctxPop, dsPop, popScaleConfig, 'Population History');
 }
 
+// Training chart zone definitions: maps canvas ID → { species, bestKey, avgKey, title }
+const TRAINING_CHART_DEFS = [
+  // Ant Eat
+  { id: 'antEatLossChart', species: 'Ant', bestKey: 'times_eating_for_nothing_best', avgKey: 'times_eating_for_nothing_avg', title: 'Eat Loss (eating for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+  { id: 'antEatSuccessChart', species: 'Ant', bestKey: 'computed_food_eaten_best', avgKey: 'computed_food_eaten_avg', title: 'Eat Success (food eaten)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  // Ant Attack
+  { id: 'antAttackLossChart', species: 'Ant', bestKey: 'computed_times_attacking_for_nothing_best', avgKey: 'computed_times_attacking_for_nothing_avg', title: 'Attack Loss (attacking for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+  { id: 'antAttackSuccessChart', species: 'Ant', bestKey: 'computed_enemies_touched_best', avgKey: 'computed_enemies_touched_avg', title: 'Attack Success (enemies touched)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  // Ant Pheromone (success only)
+  { id: 'antPheromonePlacementChart', species: 'Ant', bestKey: 'released_pheromone_around_food_source_best', avgKey: 'released_pheromone_around_food_source_avg', title: 'Pheromone Placement (near food)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  { id: 'antPheromoneSuccessChart', species: 'Ant', bestKey: 'follow_pheromones_best', avgKey: 'follow_pheromones_avg', title: 'Pheromone Success (follow pheromones)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  // Ant Carry
+  { id: 'antCarryLossChart', species: 'Ant', bestKey: 'walk_with_object_in_opposite_home_direction_best', avgKey: 'walk_with_object_in_opposite_home_direction_avg', title: 'Carry Loss (walk opposite home)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+  { id: 'antCarrySuccessChart', species: 'Ant', bestKey: 'release_at_home_count_best', avgKey: 'release_at_home_count_avg', title: 'Carry Success (release at home)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  { id: 'antCarryHomeChart', species: 'Ant', bestKey: 'walk_with_object_in_home_direction_best', avgKey: 'walk_with_object_in_home_direction_avg', title: 'Carry (walk home direction)', color: '#5a9e8f', colorAvg: '#3d7a6d' },
+  // Spider Eat
+  { id: 'spiderEatLossChart', species: 'Spider', bestKey: 'times_eating_for_nothing_best', avgKey: 'times_eating_for_nothing_avg', title: 'Eat Loss (eating for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+  { id: 'spiderEatSuccessChart', species: 'Spider', bestKey: 'computed_food_eaten_best', avgKey: 'computed_food_eaten_avg', title: 'Eat Success (food eaten)', color: '#6fb87a', colorAvg: '#4a7c59' },
+  // Spider Attack
+  { id: 'spiderAttackLossChart', species: 'Spider', bestKey: 'computed_times_attacking_for_nothing_best', avgKey: 'computed_times_attacking_for_nothing_avg', title: 'Attack Loss (attacking for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+  { id: 'spiderAttackSuccessChart', species: 'Spider', bestKey: 'computed_enemies_touched_best', avgKey: 'computed_enemies_touched_avg', title: 'Attack Success (enemies touched)', color: '#6fb87a', colorAvg: '#4a7c59' },
+];
+
+function createTrainingChart(canvasId, title, bestColor, avgColor) {
+  const el = document.getElementById(canvasId);
+  if (!el) return null;
+  const ctx = el.getContext('2d');
+  return new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Best', borderColor: bestColor, borderDash: [4, 4], data: [], borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+        { label: 'Avg', borderColor: avgColor, data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: {
+          type: 'linear',
+          display: true,
+          min: 0,
+          max: 300,
+          ticks: {
+            color: '#9b8b7a',
+            maxTicksLimit: 6,
+            callback: function(value) { return value.toFixed(0) + 's'; }
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          type: 'linear',
+          min: 0,
+          ticks: { color: '#9b8b7a' },
+          grid: { color: '#3d3228' }
+        }
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: title,
+          color: '#e8e0d4',
+          font: { size: 12, weight: '600' },
+          padding: { bottom: 6 }
+        },
+        legend: {
+          labels: { color: '#e8e0d4', font: { size: 10 }, usePointStyle: true, boxWidth: 15 }
+        },
+        tooltip: { enabled: false }
+      }
+    }
+  });
+}
+
+function initTrainingCharts() {
+  for (const def of TRAINING_CHART_DEFS) {
+    const chart = createTrainingChart(def.id, def.title, def.color, def.colorAvg);
+    if (chart) {
+      trainingCharts[def.id] = chart;
+    }
+  }
+}
+
+function updateTrainingCharts(snap) {
+  const th = snap.trainingHistory;
+  if (!th || !th.time) return;
+
+  const timeArr = th.time;
+
+  for (const def of TRAINING_CHART_DEFS) {
+    const chart = trainingCharts[def.id];
+    if (!chart) continue;
+
+    const speciesData = th[def.species];
+    if (!speciesData) continue;
+
+    const bestArr = speciesData[def.bestKey] || [];
+    const avgArr = speciesData[def.avgKey] || [];
+
+    chart.data.datasets[0].data = bestArr.map((v, i) => ({ x: timeArr[i] || 0, y: v }));
+    chart.data.datasets[1].data = avgArr.map((v, i) => ({ x: timeArr[i] || 0, y: v }));
+
+    const maxTime = timeArr.length > 0 ? timeArr[timeArr.length - 1] : 300;
+    chart.options.scales.x.max = Math.max(300, maxTime * 1.1);
+
+    chart.update('none');
+  }
+}
+
+function resetTrainingCharts() {
+  for (const chart of Object.values(trainingCharts)) {
+    chart.data.datasets.forEach(ds => ds.data = []);
+    chart.options.scales.x.max = 300;
+    chart.update('none');
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   Renderer.init(document.getElementById('simCanvas'));
   initChart();
+  initTrainingCharts();
   connectWS();
+
+  // Tab switching
+  document.querySelectorAll('.analytics-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      const targetId = tab.dataset.tab;
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) targetPanel.classList.add('active');
+      activeTabId = targetId;
+      if (trainingNeedsRedraw[targetId] && latestSnapshot) {
+        updateTrainingCharts(latestSnapshot);
+        trainingNeedsRedraw[targetId] = false;
+      }
+    });
+  });
 
 
 

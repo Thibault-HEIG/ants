@@ -237,6 +237,15 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         "stats": stats_dict,
         "topFit": top_fit_dict,
         "metricBounds": bounds_dict,
+        "trainingHistory": {
+            "time": list(getattr(simulation, "history_time", [])),
+            **{
+                getattr(cls, "species_name", cls.__name__):
+                    getattr(simulation, "history_training", {}).get(
+                        getattr(cls, "species_name", cls.__name__), {})
+                for cls in world.active_species
+            },
+        },
     }
 
 
@@ -274,5 +283,14 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
             "antAvg": ant_avg,
             "spiderBest": spider_best,
             "spiderAvg": spider_avg,
+        },
+        "trainingHistory": {
+            "time": list(getattr(simulation, "history_time", [])),
+            **{
+                getattr(cls, "species_name", cls.__name__):
+                    getattr(simulation, "history_training", {}).get(
+                        getattr(cls, "species_name", cls.__name__), {})
+                for cls in world.active_species
+            },
         },
     }

@@ -173,44 +173,104 @@
     <!-- Section 2: Analytics -->
     <section class="section section-analytics" id="sectionAnalytics">
       <div class="analytics-content">
-        <h2 style="font-weight: 300;">Live Analytics</h2>
-        <div class="charts">
-          <div class="chart-container fitnessChart">
-            <canvas id="fitnessChart"></canvas>
+        <div class="analytics-tabs">
+          <button class="analytics-tab active" data-tab="tab-live-analytics">Live Analytics</button>
+          <button class="analytics-tab" data-tab="tab-ants-training">Ants Training</button>
+          <button class="analytics-tab" data-tab="tab-spiders-training">Spiders Training</button>
+        </div>
+
+        <div class="tab-content active" id="tab-live-analytics">
+          <div class="charts">
+            <div class="chart-container fitnessChart">
+              <canvas id="fitnessChart"></canvas>
+            </div>
+            <div class="chart-container populationChart">
+              <canvas id="populationChart"></canvas>
+            </div>
           </div>
-          <div class="chart-container populationChart">
-            <canvas id="populationChart"></canvas>
+
+          <div class="bounds-container">
+            <div>
+              <div class="section-title">Ant Metric Bounds</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Max Observed</th>
+                    <th>Bound</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="antBoundsBody"></tbody>
+              </table>
+            </div>
+            <div>
+              <div class="section-title">Spider Metric Bounds</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Max Observed</th>
+                    <th>Bound</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="spiderBoundsBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        <div class="bounds-container">
-          <div>
-            <div class="section-title">Ant Metric Bounds</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Max Observed</th>
-                  <th>Bound</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="antBoundsBody"></tbody>
-            </table>
+        <div class="tab-content" id="tab-ants-training">
+          <div class="training-grid">
+            <div class="training-zone">
+              <div class="zone-title">🌱 Eat</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="antEatLossChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="antEatSuccessChart"></canvas></div>
+              </div>
+            </div>
+            <div class="training-zone">
+              <div class="zone-title">⚔️ Attack</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="antAttackLossChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="antAttackSuccessChart"></canvas></div>
+              </div>
+            </div>
+            <div class="training-zone">
+              <div class="zone-title">🐜 Pheromone</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="antPheromonePlacementChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="antPheromoneSuccessChart"></canvas></div>
+              </div>
+            </div>
+            <div class="training-zone">
+              <div class="zone-title">🎒 Carry</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="antCarryLossChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="antCarrySuccessChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="antCarryHomeChart"></canvas></div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div class="section-title">Spider Metric Bounds</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Max Observed</th>
-                  <th>Bound</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="spiderBoundsBody"></tbody>
-            </table>
+        </div>
+
+        <div class="tab-content" id="tab-spiders-training">
+          <div class="training-grid training-grid-2col">
+            <div class="training-zone">
+              <div class="zone-title">🌱 Eat</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="spiderEatLossChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="spiderEatSuccessChart"></canvas></div>
+              </div>
+            </div>
+            <div class="training-zone">
+              <div class="zone-title">⚔️ Attack</div>
+              <div class="zone-charts">
+                <div class="chart-container training-chart"><canvas id="spiderAttackLossChart"></canvas></div>
+                <div class="chart-container training-chart"><canvas id="spiderAttackSuccessChart"></canvas></div>
+              </div>
+            </div>
           </div>
         </div>
 

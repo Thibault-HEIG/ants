@@ -144,7 +144,6 @@ class Ant(Creature):
                 PHEROMONE_MAX_STRENGTH,
             )
             self._pheromone_cooldown_timer = PHEROMONE_COOLDOWN
-            self._last_tile_strength = float(world.pheromone_grid[cx, cy])
 
             score = self._compute_pheromone_placement_score(world)
             self.released_pheromone_around_food_source += score
@@ -153,7 +152,7 @@ class Ant(Creature):
         """Score a pheromone release based on proximity to the nearest food source
         and alignment with the anthill→source corridor.
 
-        Returns a value in [0, 2]: distance_score [0,1] + is_between [0,1].
+        Returns a value in [0, 2]: distance_score [0,1] + is_between [-0.5,1].
         """
         food_sources = getattr(world, "food_sources", [])
         if not food_sources:
@@ -204,7 +203,7 @@ class Ant(Creature):
         proj_t = ((ax - hx) * seg_dx + (ay - hy) * seg_dy) / seg_len_sq
 
         # Corridor is +- 50px wide and between the anthill and food source
-        is_between = 1.0 if (perp_dist <= 50.0 and 0.0 <= proj_t <= 1.0) else 0.0
+        is_between = 1.0 if (perp_dist <= 50.0 and 0.0 <= proj_t <= 1.0) else -0.5
 
         return distance_score + is_between
 
