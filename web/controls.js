@@ -637,9 +637,17 @@ function updateTrainingCharts(snap) {
 
     const bestArr = speciesData[def.bestKey] || [];
     const avgArr = speciesData[def.avgKey] || [];
+    const bestLtArr = speciesData[def.bestKey + '_lifetime'] || [];
+    const avgLtArr = speciesData[def.avgKey + '_lifetime'] || [];
 
-    chart.data.datasets[0].data = bestArr.map((v, i) => ({ x: timeArr[i] || 0, y: v }));
-    chart.data.datasets[1].data = avgArr.map((v, i) => ({ x: timeArr[i] || 0, y: v }));
+    chart.data.datasets[0].data = bestArr.map((v, i) => ({
+      x: timeArr[i] || 0,
+      y: v / Math.max(1, bestLtArr[i] || 0)
+    }));
+    chart.data.datasets[1].data = avgArr.map((v, i) => ({
+      x: timeArr[i] || 0,
+      y: v / Math.max(1, avgLtArr[i] || 0)
+    }));
 
     const maxTime = timeArr.length > 0 ? timeArr[timeArr.length - 1] : 300;
     chart.options.scales.x.max = Math.max(300, maxTime * 1.1);

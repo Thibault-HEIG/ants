@@ -120,6 +120,8 @@ class Simulation:
             for m in metrics:
                 series[f"{m}_best"] = []
                 series[f"{m}_avg"] = []
+                series[f"{m}_best_lifetime"] = []
+                series[f"{m}_avg_lifetime"] = []
             result[name] = series
         return result
 
@@ -407,23 +409,36 @@ class Simulation:
             self.history_fitness[name].append(round(avg_fit, 2))
 
             # Per-ability training metrics: best + avg over living population
+            # Also record per-metric lifetime pairs for frontend normalization.
             training = self.history_training.get(name, {})
             for metric in TRAINING_METRICS.get(name, []):
                 if living:
-                    values = [float(getattr(c, metric, 0.0)) for c in living]
-                    best_val = max(values)
-                    avg_val = sum(values) / len(values)
+                    best_creature = max(living, key=lambda c: float(getattr(c, metric, 0.0)))
+                    best_val = float(getattr(best_creature, metric, 0.0))
+                    best_lifetime = float(getattr(best_creature, "survival_time", 0.0))
+                    avg_val = sum(float(getattr(c, metric, 0.0)) for c in living) / len(living)
+                    avg_lifetime = sum(float(getattr(c, "survival_time", 0.0)) for c in living) / len(living)
                 else:
                     best_val = 0.0
+                    best_lifetime = 0.0
                     avg_val = 0.0
+                    avg_lifetime = 0.0
                 best_key = f"{metric}_best"
                 avg_key = f"{metric}_avg"
+                best_lt_key = f"{metric}_best_lifetime"
+                avg_lt_key = f"{metric}_avg_lifetime"
                 if best_key not in training:
                     training[best_key] = []
                 if avg_key not in training:
                     training[avg_key] = []
+                if best_lt_key not in training:
+                    training[best_lt_key] = []
+                if avg_lt_key not in training:
+                    training[avg_lt_key] = []
                 training[best_key].append(round(best_val, 2))
                 training[avg_key].append(round(avg_val, 2))
+                training[best_lt_key].append(round(best_lifetime, 2))
+                training[avg_lt_key].append(round(avg_lifetime, 2))
 
     def plot_fitness_curves(self) -> None:
         """Draw historical average fitness curves for all species in the terminal using plotext."""
