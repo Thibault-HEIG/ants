@@ -253,16 +253,38 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         "stats": stats_dict,
         "topFit": top_fit_dict,
         "metricBounds": bounds_dict,
-        "trainingHistory": {
-            "time": list(getattr(simulation, "history_time", [])),
-            **{
-                getattr(cls, "species_name", cls.__name__):
-                    getattr(simulation, "history_training", {}).get(
-                        getattr(cls, "species_name", cls.__name__), {})
-                for cls in world.active_species
-            },
-        },
+        "trainingHistory": _build_training_delta(simulation, world),
     }
+
+
+def _build_training_delta(simulation: Any, world: Any) -> dict[str, Any]:
+    """Build an incremental delta of training history since the last broadcast."""
+    start_idx = getattr(simulation, "_last_sent_training_idx", 0)
+    reset_flag = getattr(simulation, "_training_reset_flag", False)
+    history_time = getattr(simulation, "history_time", [])
+    history_training = getattr(simulation, "history_training", {})
+
+    time_slice = history_time[start_idx:]
+
+    delta: dict[str, Any] = {
+        "startIdx": start_idx,
+        "reset": reset_flag,
+        "time": time_slice,
+    }
+
+    for cls in world.active_species:
+        species_name = getattr(cls, "species_name", cls.__name__)
+        species_training = history_training.get(species_name, {})
+        species_delta: dict[str, list] = {}
+        for key, arr in species_training.items():
+            species_delta[key] = arr[start_idx:]
+        delta[species_name] = species_delta
+
+    # Advance the cursor for next broadcast
+    simulation._last_sent_training_idx = len(history_time)
+    simulation._training_reset_flag = False
+
+    return delta
 
 
 def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, Any]:

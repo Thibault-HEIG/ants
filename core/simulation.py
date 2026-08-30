@@ -100,6 +100,8 @@ class Simulation:
         # Per-ability best+avg training signal history (same cadence as history_fitness)
         self.history_training: dict[str, dict[str, list[float]]] = self._make_empty_training_history()
         self._plot_timer: float = 0.0
+        self._last_sent_training_idx: int = 0
+        self._training_reset_flag: bool = True  # Send full history on first broadcast
         self._record_fitness_stat()
 
         if load_path is not None:
@@ -320,6 +322,8 @@ class Simulation:
                 self.world.generation_counts[cls] = save_data["generation_counts"].get(sp_name, 0)
 
         print("[LOAD] Successfully started simulation from saved state.")
+        self._last_sent_training_idx = 0
+        self._training_reset_flag = True
         return save_data.get("constants_snapshot", {})
 
 
@@ -334,6 +338,8 @@ class Simulation:
             for series in species_series.values():
                 series.clear()
         self._plot_timer = 0.0
+        self._last_sent_training_idx = 0
+        self._training_reset_flag = True
         self._record_fitness_stat()
 
     @property

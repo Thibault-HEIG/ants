@@ -165,6 +165,11 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = 
     CLIENTS.add(websocket)
     logger.info(f"Client connected: {websocket.remote_address}")
 
+    # Force full training history resend for the new client
+    if SIMULATION is not None:
+        SIMULATION._last_sent_training_idx = 0
+        SIMULATION._training_reset_flag = True
+
     # Push pending reload result to the reconnecting client
     if RELOAD_RESULT is not None:
         try:

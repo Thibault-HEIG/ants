@@ -126,6 +126,7 @@ let populationChart = null;
 
 // Training chart instances keyed by canvas ID
 let trainingCharts = {};
+let trainingHistoryCache = { time: [] };  // Accumulated full history from server deltas
 let trainingNeedsRedraw = { 'tab-ants-training': true, 'tab-spiders-training': true };
 
 // Try to load chart state from local storage
@@ -363,10 +364,37 @@ function handleSnapshot(snap) {
     }
   }
 
-  // Update training charts — only for the visible tab, mark others for redraw
+  // Update training charts — accumulate deltas into cache
   if (snap.trainingHistory) {
+    const delta = snap.trainingHistory;
+
+    // On reset, clear the cache entirely
+    if (delta.reset) {
+      trainingHistoryCache = { time: [] };
+    }
+
+    // Append new time entries
+    if (delta.time && delta.time.length > 0) {
+      trainingHistoryCache.time.push(...delta.time);
+    }
+
+    // Append new metric entries for each species
+    for (const key in delta) {
+      if (key === 'time' || key === 'startIdx' || key === 'reset') continue;
+      // key is a species name like "Ant" or "Spider"
+      if (!trainingHistoryCache[key]) trainingHistoryCache[key] = {};
+      const speciesDelta = delta[key];
+      const speciesCache = trainingHistoryCache[key];
+      for (const metricKey in speciesDelta) {
+        if (!speciesCache[metricKey]) speciesCache[metricKey] = [];
+        speciesCache[metricKey].push(...speciesDelta[metricKey]);
+      }
+    }
+
+    // Build a fake snap with the full accumulated cache for the chart updater
+    const cachedSnap = { trainingHistory: trainingHistoryCache };
     if (activeTabId === 'tab-ants-training' || activeTabId === 'tab-spiders-training') {
-      updateTrainingCharts(snap);
+      updateTrainingCharts(cachedSnap);
       trainingNeedsRedraw[activeTabId] = false;
     } else {
       trainingNeedsRedraw['tab-ants-training'] = true;
@@ -631,7 +659,7 @@ function initTrainingCharts() {
       btnContinuous.style.color = '#1a1a1a';
       btnGenerational.style.background = 'transparent';
       btnGenerational.style.color = '#9b8b7a';
-      if (latestSnapshot) updateTrainingCharts(latestSnapshot);
+      if (trainingHistoryCache.time.length > 0) updateTrainingCharts({ trainingHistory: trainingHistoryCache });
     });
     btnGenerational.addEventListener('click', () => {
       chartRenderingMode = 'Generational';
@@ -639,7 +667,7 @@ function initTrainingCharts() {
       btnGenerational.style.color = '#1a1a1a';
       btnContinuous.style.background = 'transparent';
       btnContinuous.style.color = '#9b8b7a';
-      if (latestSnapshot) updateTrainingCharts(latestSnapshot);
+      if (trainingHistoryCache.time.length > 0) updateTrainingCharts({ trainingHistory: trainingHistoryCache });
     });
   }
 }
@@ -720,6 +748,7 @@ function updateTrainingCharts(snap) {
 }
 
 function resetTrainingCharts() {
+  trainingHistoryCache = { time: [] };
   for (const chart of Object.values(trainingCharts)) {
     chart.data.datasets.forEach(ds => ds.data = []);
     chart.options.scales.x.max = 300;
@@ -743,8 +772,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const targetPanel = document.getElementById(targetId);
       if (targetPanel) targetPanel.classList.add('active');
       activeTabId = targetId;
-      if (trainingNeedsRedraw[targetId] && latestSnapshot) {
-        updateTrainingCharts(latestSnapshot);
+      if (trainingNeedsRedraw[targetId] && trainingHistoryCache.time.length > 0) {
+        updateTrainingCharts({ trainingHistory: trainingHistoryCache });
         trainingNeedsRedraw[targetId] = false;
       }
     });
