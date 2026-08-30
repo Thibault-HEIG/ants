@@ -612,6 +612,7 @@ function createTrainingChart(canvasId, title, bestColor, avgColor) {
     }
   });
 }
+let chartRenderingMode = 'Continuous';
 
 function initTrainingCharts() {
   for (const def of TRAINING_CHART_DEFS) {
@@ -620,6 +621,27 @@ function initTrainingCharts() {
       trainingCharts[def.id] = chart;
     }
   }
+
+  const btnContinuous = document.getElementById('btnContinuous');
+  const btnGenerational = document.getElementById('btnGenerational');
+  if (btnContinuous && btnGenerational) {
+    btnContinuous.addEventListener('click', () => {
+      chartRenderingMode = 'Continuous';
+      btnContinuous.style.background = '#c4a35a';
+      btnContinuous.style.color = '#1a1a1a';
+      btnGenerational.style.background = 'transparent';
+      btnGenerational.style.color = '#9b8b7a';
+      if (latestSnapshot) updateTrainingCharts(latestSnapshot);
+    });
+    btnGenerational.addEventListener('click', () => {
+      chartRenderingMode = 'Generational';
+      btnGenerational.style.background = '#c4a35a';
+      btnGenerational.style.color = '#1a1a1a';
+      btnContinuous.style.background = 'transparent';
+      btnContinuous.style.color = '#9b8b7a';
+      if (latestSnapshot) updateTrainingCharts(latestSnapshot);
+    });
+  }
 }
 
 function updateTrainingCharts(snap) {
@@ -627,6 +649,7 @@ function updateTrainingCharts(snap) {
   if (!th || !th.time) return;
 
   const timeArr = th.time;
+  const GENERATION_DURATION = window.getConstant ? (window.getConstant('GENERATION_DURATION') || 300) : 300;
 
   for (const def of TRAINING_CHART_DEFS) {
     const chart = trainingCharts[def.id];
@@ -640,14 +663,54 @@ function updateTrainingCharts(snap) {
     const bestLtArr = speciesData[def.bestKey + '_lifetime'] || [];
     const avgLtArr = speciesData[def.avgKey + '_lifetime'] || [];
 
-    chart.data.datasets[0].data = bestArr.map((v, i) => ({
-      x: timeArr[i] || 0,
-      y: v / Math.max(1, bestLtArr[i] || 0)
-    }));
-    chart.data.datasets[1].data = avgArr.map((v, i) => ({
-      x: timeArr[i] || 0,
-      y: v / Math.max(1, avgLtArr[i] || 0)
-    }));
+    let datasetBest = [];
+    let datasetAvg = [];
+
+    if (chartRenderingMode === 'Generational') {
+      // Create 2 buckets per generation (first half, second half)
+      const halfGen = GENERATION_DURATION / 2;
+      const buckets = {};
+
+      for (let i = 0; i < timeArr.length; i++) {
+        const t = timeArr[i];
+        const bucketIdx = Math.floor(t / halfGen);
+        
+        if (!buckets[bucketIdx]) {
+          buckets[bucketIdx] = { sumBest: 0, sumAvg: 0, timeSum: 0, count: 0 };
+        }
+        
+        const b = buckets[bucketIdx];
+        b.sumBest += (bestArr[i] || 0) / Math.max(1, bestLtArr[i] || 0);
+        b.sumAvg += (avgArr[i] || 0) / Math.max(1, avgLtArr[i] || 0);
+        b.timeSum += t;
+        b.count++;
+      }
+
+      // Convert each bucket average into a single smooth data point
+      const sortedBuckets = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+      for (const bIdx of sortedBuckets) {
+        const b = buckets[bIdx];
+        if (b.count > 0) {
+          datasetBest.push({ x: b.timeSum / b.count, y: b.sumBest / b.count });
+          datasetAvg.push({ x: b.timeSum / b.count, y: b.sumAvg / b.count });
+        }
+      }
+    } else {
+      // Continuous mode: show all raw data points
+      for (let i = 0; i < timeArr.length; i++) {
+        datasetBest.push({
+          x: timeArr[i] || 0,
+          y: (bestArr[i] || 0) / Math.max(1, bestLtArr[i] || 0)
+        });
+        datasetAvg.push({
+          x: timeArr[i] || 0,
+          y: (avgArr[i] || 0) / Math.max(1, avgLtArr[i] || 0)
+        });
+      }
+    }
+
+    chart.data.datasets[0].data = datasetBest;
+    chart.data.datasets[1].data = datasetAvg;
 
     const maxTime = timeArr.length > 0 ? timeArr[timeArr.length - 1] : 300;
     chart.options.scales.x.max = Math.max(300, maxTime * 1.1);

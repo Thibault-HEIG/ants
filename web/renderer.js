@@ -175,7 +175,7 @@ window.Renderer = {
           
           if (sprite) {
             ctx.save();
-            // Rotate sprite by 90 degrees (assuming native asset faces UP)
+            // Rotate sprite by 90 degrees (if native asset faces UP)
             // to align it with the walking direction (+X axis)
             ctx.rotate(Math.PI / 2);
             ctx.drawImage(sprite, -c.radius, -c.radius, c.radius * 2, c.radius * 2);
