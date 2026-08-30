@@ -16,6 +16,10 @@ import numpy as np
 from core.constants import FRAMES_PER_DT, GENERATION_DURATION, WORLD_HEIGHT, WORLD_WIDTH
 from core.utils import SpeciesStats
 
+_stats_cache: dict[str, tuple[float, dict]] = {}  # species_name -> (timestamp, stats_dict)
+_bounds_cache: dict[str, tuple[float, dict]] = {}  # species_name -> (timestamp, bounds_dict)
+_STATS_CACHE_TTL: float = 1.0  # seconds
+
 
 def _json_encode(snapshot: dict[str, Any]) -> str:
     """Encode a snapshot dictionary to a JSON string."""
@@ -153,17 +157,29 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
                 "attacking": bool(getattr(c, "is_attacking", False)),
                 "carrying": carried_obj is not None,
                 "carriedType": food_type,
-                "fitness": round(float(c.compute_fitness()), 4),
                 "radius": float(getattr(c, "radius", 2.0)),
             })
         creatures_dict[species_name] = c_list
 
-        fit_scores = [(c_data["fitness"], idx) for idx, c_data in enumerate(c_list)]
+        fit_scores = [(c.compute_fitness(), idx) for idx, c in enumerate(living)]
         fit_scores.sort(key=lambda x: x[0], reverse=True)
         top_fit_dict[species_name] = [idx for _, idx in fit_scores[:3]]
 
-        stats_dict[species_name] = _compute_species_stats(world, cls)
-        bounds_dict[species_name] = _compute_metric_bounds(world, cls)
+        # Use cached stats if available and fresh
+        now = world.round_time
+        cached_stats = _stats_cache.get(species_name)
+        if cached_stats is not None and (now - cached_stats[0]) < _STATS_CACHE_TTL:
+            stats_dict[species_name] = cached_stats[1]
+        else:
+            stats_dict[species_name] = _compute_species_stats(world, cls)
+            _stats_cache[species_name] = (now, stats_dict[species_name])
+
+        cached_bounds = _bounds_cache.get(species_name)
+        if cached_bounds is not None and (now - cached_bounds[0]) < _STATS_CACHE_TTL:
+            bounds_dict[species_name] = cached_bounds[1]
+        else:
+            bounds_dict[species_name] = _compute_metric_bounds(world, cls)
+            _bounds_cache[species_name] = (now, bounds_dict[species_name])
 
     food_list = []
     for f in world.food_items:
@@ -205,7 +221,7 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         })
 
     grid = world.pheromone_grid
-    active_indices = np.where(grid > 0.005)
+    active_indices = np.where(grid > 0.02)
     ph_data = []
     for x, y in zip(active_indices[0], active_indices[1]):
         strength = float(grid[x, y])
@@ -256,8 +272,22 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
 
     for cls in world.active_species:
         species_name = getattr(cls, "species_name", cls.__name__)
-        stats_dict[species_name] = _compute_species_stats(world, cls)
-        bounds_dict[species_name] = _compute_metric_bounds(world, cls)
+        
+        # Use cached stats if available and fresh
+        now = world.round_time
+        cached_stats = _stats_cache.get(species_name)
+        if cached_stats is not None and (now - cached_stats[0]) < _STATS_CACHE_TTL:
+            stats_dict[species_name] = cached_stats[1]
+        else:
+            stats_dict[species_name] = _compute_species_stats(world, cls)
+            _stats_cache[species_name] = (now, stats_dict[species_name])
+
+        cached_bounds = _bounds_cache.get(species_name)
+        if cached_bounds is not None and (now - cached_bounds[0]) < _STATS_CACHE_TTL:
+            bounds_dict[species_name] = cached_bounds[1]
+        else:
+            bounds_dict[species_name] = _compute_metric_bounds(world, cls)
+            _bounds_cache[species_name] = (now, bounds_dict[species_name])
 
     ant_best = stats_dict.get("Ant", {}).get("bestFitness", 0.0)
     ant_avg = stats_dict.get("Ant", {}).get("avgFitness", 0.0)

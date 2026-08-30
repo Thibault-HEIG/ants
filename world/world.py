@@ -116,7 +116,6 @@ class World:
         self.tile_grid: TileGrid = TileGrid(float(self.width), float(self.height), cell_size=10.0)
         self.pheromone_cell_size: float = self.tile_grid.cell_size
         self.pheromone_grid: np.ndarray = self.tile_grid.create_float_grid()
-        self._pheromone_list: list[list[float]] = self.pheromone_grid.tolist()
 
         # Populate initial world state
         for cls in self.active_species:
@@ -195,7 +194,6 @@ class World:
         from species.ant_constants import PHEROMONE_STRENGTH, PHEROMONE_DURATION, PHEROMONE_MAX_STRENGTH
         decay_amount = (PHEROMONE_STRENGTH / PHEROMONE_DURATION) * dt
         np.maximum(self.pheromone_grid - decay_amount, 0.0, out=self.pheromone_grid)
-        self._pheromone_list = self.pheromone_grid.tolist()
 
         # Phase 0: Environment update first — spawns food sources and food items
         self.environment.update(dt)
@@ -251,7 +249,6 @@ class World:
                     spatial_hash=self.spatial_hash,
                     lakes=self.lakes,
                     pheromone_grid=self.pheromone_grid,
-                    pheromone_list=self._pheromone_list,
                     pheromone_cell_size=self.pheromone_cell_size,
                 )
                 creature.update(dt, sensor_data, world=self)
@@ -426,7 +423,6 @@ class World:
         self.generation_timers[cls] = 0.0
         self.generation_counts[cls] += 1
         self.pheromone_grid.fill(0.0)
-        self._pheromone_list = self.pheromone_grid.tolist()
         
         self.food_items = []
         self.environment.food_sources.clear()
@@ -488,7 +484,6 @@ class World:
 
         # Pheromones are world state independent from evolution — clear them
         self.pheromone_grid.fill(0.0)
-        self._pheromone_list = self.pheromone_grid.tolist()
 
     def _spawn_species(self, cls: type, genomes: list[np.ndarray] | None = None) -> None:
         """Spawn initial population for a given species class."""
@@ -545,7 +540,6 @@ class World:
         self.all_time_counts = {cls: 0 for cls in self.active_species}
         self.round_time = 0.0
         self.pheromone_grid.fill(0.0)
-        self._pheromone_list = self.pheromone_grid.tolist()
 
     def get_all_entities(self) -> dict:
         """Return all entities for rendering."""

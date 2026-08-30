@@ -8,6 +8,9 @@ spriteNames.forEach(name => {
 
 let canvas, ctx;
 let camera = { x: 0, y: 0, zoom: 1 };
+let cachedDirtGrad = null;
+let cachedRockGrad = null;
+let cachedWorldSize = null;
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
 
@@ -35,18 +38,21 @@ window.Renderer = {
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-snap.world.width / 2, -snap.world.height / 2);
 
-    // World background (Gradient)
-    const dirtGrad = ctx.createLinearGradient(0, 0, snap.world.width / 2, 0);
-    dirtGrad.addColorStop(0, '#3d2b1f');
-    dirtGrad.addColorStop(1, '#2a1f14');
-    
-    const rockGrad = ctx.createLinearGradient(snap.world.width / 2, 0, snap.world.width, 0);
-    rockGrad.addColorStop(0, '#2a2d32');
-    rockGrad.addColorStop(1, '#1c1f26');
+    // World background (Gradient) — cached
+    const wKey = snap.world.width + 'x' + snap.world.height;
+    if (!cachedDirtGrad || cachedWorldSize !== wKey) {
+      cachedDirtGrad = ctx.createLinearGradient(0, 0, snap.world.width / 2, 0);
+      cachedDirtGrad.addColorStop(0, '#3d2b1f');
+      cachedDirtGrad.addColorStop(1, '#2a1f14');
+      cachedRockGrad = ctx.createLinearGradient(snap.world.width / 2, 0, snap.world.width, 0);
+      cachedRockGrad.addColorStop(0, '#2a2d32');
+      cachedRockGrad.addColorStop(1, '#1c1f26');
+      cachedWorldSize = wKey;
+    }
 
-    ctx.fillStyle = dirtGrad;
+    ctx.fillStyle = cachedDirtGrad;
     ctx.fillRect(0, 0, snap.world.width / 2, snap.world.height);
-    ctx.fillStyle = rockGrad;
+    ctx.fillStyle = cachedRockGrad;
     ctx.fillRect(snap.world.width / 2, 0, snap.world.width / 2, snap.world.height);
 
     // Border
@@ -95,22 +101,19 @@ window.Renderer = {
       });
     }
 
-    // Food
+    // Food (batched — no save/restore)
     if (snap.food) {
       snap.food.forEach(f => {
         if (f.carried) return;
-        ctx.save();
-        ctx.translate(f.x, f.y);
         const sprite = f.type === "sugar" ? sprites['sugar'] : sprites['seed'];
         if (sprite) {
-          ctx.drawImage(sprite, -4, -4, 8, 8);
+          ctx.drawImage(sprite, f.x - 4, f.y - 4, 8, 8);
         } else {
           ctx.fillStyle = f.type === "sugar" ? "#38bdf8" : "#f59e0b";
           ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.arc(f.x, f.y, 4, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.restore();
       });
     }
 
@@ -171,7 +174,12 @@ window.Renderer = {
           ctx.rotate(c.dir);
           
           if (sprite) {
+            ctx.save();
+            // Rotate sprite by 90 degrees (assuming native asset faces UP)
+            // to align it with the walking direction (+X axis)
+            ctx.rotate(Math.PI / 2);
             ctx.drawImage(sprite, -c.radius, -c.radius, c.radius * 2, c.radius * 2);
+            ctx.restore();
           } else {
             ctx.fillStyle = spName === "Ant" ? "#6fb87a" : "#c94a4a";
             ctx.beginPath();
@@ -189,7 +197,8 @@ window.Renderer = {
           if (c.carrying && c.carriedType) {
             const carrySprite = c.carriedType === "sugar" ? sprites['sugar'] : sprites['seed'];
             if (carrySprite) {
-              ctx.drawImage(carrySprite, -2, -2, 4, 4);
+              // Draw carried object at the creature's head/mandibles
+              ctx.drawImage(carrySprite, c.radius - 2, -3, 6, 6);
             }
           }
           

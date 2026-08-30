@@ -519,7 +519,7 @@ class Creature(ABC):
 
     def _check_cached_fitness(self, force: bool = False) -> float | None:
         world = getattr(self, "world", None)
-        if not force and self._cached_fitness is not None and world is not None and (world.round_time - self._last_fitness_calc_time) < 0.5:
+        if not force and self._cached_fitness is not None and world is not None and (world.round_time - self._last_fitness_calc_time) < 2.0:
             return self._cached_fitness
         return None
 
