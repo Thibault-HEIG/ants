@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS metric_bounds (
 );
 CREATE INDEX IF NOT EXISTS idx_bounds_snapshot ON metric_bounds(snapshot_id, species_name, metric);
 
-CREATE TABLE IF NOT EXISTS creature_snapshots (
+CREATE TABLE IF NOT EXISTS creatures (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id                 INTEGER NOT NULL REFERENCES snapshots(id),
+    run_id                      INTEGER NOT NULL REFERENCES runs(id),
     species_name                TEXT NOT NULL,
     generation                  INTEGER,
     creature_uid                INTEGER NOT NULL,
@@ -75,9 +75,10 @@ CREATE TABLE IF NOT EXISTS creature_snapshots (
     computed_enemies_touched    REAL NOT NULL,
     times_attacking_for_nothing INTEGER NOT NULL,
     tiles_covered               INTEGER NOT NULL,
-    release_at_home_count       INTEGER NOT NULL
+    release_at_home_count       INTEGER NOT NULL,
+    UNIQUE(run_id, creature_uid)
 );
-CREATE INDEX IF NOT EXISTS idx_creature_snap ON creature_snapshots(snapshot_id, species_name, creature_uid);
+CREATE INDEX IF NOT EXISTS idx_creatures_run ON creatures(run_id, species_name, creature_uid);
 
 CREATE TABLE IF NOT EXISTS genomes (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

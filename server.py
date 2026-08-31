@@ -96,9 +96,9 @@ class StaticFileHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps(data).encode("utf-8"))
                 elif endpoint == "creatures":
                     cursor = TRACKING_DB.conn.execute("""
-                        SELECT s.time, c.species_name, c.creature_uid, c.fitness, c.lifetime, c.food_eaten
-                        FROM creature_snapshots c JOIN snapshots s ON c.snapshot_id = s.id
-                        WHERE s.run_id = ? ORDER BY s.time ASC
+                        SELECT c.lifetime as time, c.species_name, c.creature_uid, c.fitness, c.lifetime, c.food_eaten
+                        FROM creatures c
+                        WHERE c.run_id = ? ORDER BY c.creature_uid ASC
                     """, (run_id,))
                     cols = [c[0] for c in cursor.description]
                     data = [dict(zip(cols, row)) for row in cursor.fetchall()]
@@ -192,23 +192,7 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "print_population":
         SIMULATION._print_metric_recap()
 
-    elif msg_type == "load_save_data":
-        save_content = data.get("content")
-        if save_content:
-            try:
-                import tempfile, os
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, dir='saves') as f:
-                    json.dump(save_content, f)
-                    temp_path = f.name
-                result = SIMULATION.load_from_save(temp_path)
-                os.unlink(temp_path)
-                if result is not None:
-                    await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": "Simulation loaded from uploaded save"}))
-                else:
-                    await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": "Failed to load save — check file format"}))
-            except Exception as exc:
-                logger.error(f"Load failed: {exc}")
-                await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": f"Load failed: {exc}"}))
+
 
     elif msg_type == "load_from_db":
         run_id = data.get("run_id")

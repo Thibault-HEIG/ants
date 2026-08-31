@@ -613,24 +613,59 @@ function handleSnapshot(snap) {
     let maxFit = 1.0;
     let maxPop = 100.0;
 
+    let latestAnt = null;
+    let latestSpider = null;
+
     for (const r of rows) {
       const t = r.time;
       if (t > maxTime) maxTime = t;
       if (r.max_pop > maxPop) maxPop = r.max_pop;
 
       if (r.species_name === 'Ant') {
+        latestAnt = r;
         if (r.fitness_best > maxFit) maxFit = r.fitness_best;
         if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
         dsFit[0].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
         dsFit[1].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
         dsPop[0].data.push({ x: t, y: r.alive });
       } else if (r.species_name === 'Spider') {
+        latestSpider = r;
         if (r.fitness_best > maxFit) maxFit = r.fitness_best;
         if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
         dsFit[2].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
         dsFit[3].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
         dsPop[1].data.push({ x: t, y: r.alive });
       }
+    }
+
+    if (latestAnt) {
+      document.getElementById('antAlive').innerText = `${latestAnt.alive}/${latestAnt.max_pop}`;
+      document.getElementById('antBestFit').innerText = latestAnt.fitness_best.toFixed(2);
+      document.getElementById('antAvgFit').innerText = latestAnt.fitness_avg.toFixed(2);
+      document.getElementById('antBestLife').innerText = latestAnt.lifetime_best.toFixed(1) + 's';
+      document.getElementById('antAvgLife').innerText = latestAnt.lifetime_avg.toFixed(1) + 's';
+      document.getElementById('antBestFood').innerText = latestAnt.food_best.toFixed(0);
+      document.getElementById('antAvgFood').innerText = latestAnt.food_avg.toFixed(1);
+      document.getElementById('antBestEnemies').innerText = latestAnt.enemies_best.toFixed(0);
+      document.getElementById('antAvgEnemies').innerText = latestAnt.enemies_avg.toFixed(1);
+      document.getElementById('antBestTiles').innerText = latestAnt.tiles_best.toFixed(0);
+      document.getElementById('antAvgTiles').innerText = latestAnt.tiles_avg.toFixed(1);
+      if (document.getElementById('antBestHomeFood')) document.getElementById('antBestHomeFood').innerText = latestAnt.release_home_best.toFixed(0);
+      if (document.getElementById('antAvgHomeFood')) document.getElementById('antAvgHomeFood').innerText = latestAnt.release_home_avg.toFixed(1);
+    }
+
+    if (latestSpider) {
+      document.getElementById('spiderAlive').innerText = `${latestSpider.alive}/${latestSpider.max_pop}`;
+      document.getElementById('spiderBestFit').innerText = latestSpider.fitness_best.toFixed(2);
+      document.getElementById('spiderAvgFit').innerText = latestSpider.fitness_avg.toFixed(2);
+      document.getElementById('spiderBestLife').innerText = latestSpider.lifetime_best.toFixed(1) + 's';
+      document.getElementById('spiderAvgLife').innerText = latestSpider.lifetime_avg.toFixed(1) + 's';
+      document.getElementById('spiderBestFood').innerText = latestSpider.food_best.toFixed(0);
+      document.getElementById('spiderAvgFood').innerText = latestSpider.food_avg.toFixed(1);
+      document.getElementById('spiderBestEnemies').innerText = latestSpider.enemies_best.toFixed(0);
+      document.getElementById('spiderAvgEnemies').innerText = latestSpider.enemies_avg.toFixed(1);
+      document.getElementById('spiderBestTiles').innerText = latestSpider.tiles_best.toFixed(0);
+      document.getElementById('spiderAvgTiles').innerText = latestSpider.tiles_avg.toFixed(1);
     }
 
     fitnessChart.options.scales.x.max = maxTime * 1.05;
@@ -720,25 +755,7 @@ function handleSnapshot(snap) {
     document.getElementById("btnControls").onclick = () => controlsModal.classList.add("open");
     document.getElementById("btnCloseControls").onclick = () => controlsModal.classList.remove("open");
 
-    // Load
-    const fileInput = document.getElementById("fileLoad");
-    document.getElementById("btnLoad").onclick = () => fileInput.click();
-    fileInput.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          try {
-            const parsedJSON = JSON.parse(ev.target.result);
-            ws.send(JSON.stringify({ type: 'load_save_data', content: parsedJSON }));
-          } catch (err) {
-            showBanner("Error parsing JSON", "error");
-          }
-        };
-        reader.readAsText(file);
-      }
-      fileInput.value = "";
-    };
+
 
     // Load DB Modal
     const loadDbModal = document.getElementById("loadDbModal");

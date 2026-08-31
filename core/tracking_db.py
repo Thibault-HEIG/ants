@@ -33,99 +33,11 @@ class TrackingDB:
 
     def _init_schema(self) -> None:
         """Create all tables and indexes if they don't exist."""
+        schema_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'schema.sql')
+        with open(schema_path, 'r', encoding='utf-8') as f:
+            schema_sql = f.read()
         with self.conn:
-            self.conn.executescript("""
-CREATE TABLE IF NOT EXISTS runs (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at TEXT NOT NULL,
-    ended_at   TEXT,
-    notes      TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS snapshots (
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL REFERENCES runs(id),
-    time   REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_snapshots_run_time ON snapshots(run_id, time);
-
-CREATE TABLE IF NOT EXISTS training_metrics (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id   INTEGER NOT NULL REFERENCES snapshots(id),
-    species_name  TEXT NOT NULL,
-    generation    INTEGER,
-    metric        TEXT NOT NULL,
-    best          REAL NOT NULL,
-    avg           REAL NOT NULL,
-    best_lifetime REAL NOT NULL,
-    avg_lifetime  REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_training_snapshot ON training_metrics(snapshot_id, species_name, metric);
-
-CREATE TABLE IF NOT EXISTS live_stats (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id       INTEGER NOT NULL REFERENCES snapshots(id),
-    species_name      TEXT NOT NULL,
-    generation        INTEGER,
-    alive             INTEGER NOT NULL,
-    max_pop           INTEGER NOT NULL,
-    fitness_best      REAL NOT NULL,
-    fitness_avg       REAL NOT NULL,
-    lifetime_best     REAL NOT NULL,
-    lifetime_avg      REAL NOT NULL,
-    food_best         REAL NOT NULL,
-    food_avg          REAL NOT NULL,
-    enemies_best      REAL NOT NULL,
-    enemies_avg       REAL NOT NULL,
-    tiles_best        REAL NOT NULL,
-    tiles_avg         REAL NOT NULL,
-    release_home_best INTEGER NOT NULL,
-    release_home_avg  REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_livestats_snapshot ON live_stats(snapshot_id, species_name);
-
-CREATE TABLE IF NOT EXISTS metric_bounds (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id  INTEGER NOT NULL REFERENCES snapshots(id),
-    species_name TEXT NOT NULL,
-    generation   INTEGER,
-    metric       TEXT NOT NULL,
-    max_observed REAL NOT NULL,
-    bound        REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_bounds_snapshot ON metric_bounds(snapshot_id, species_name, metric);
-
-CREATE TABLE IF NOT EXISTS creature_snapshots (
-    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id                 INTEGER NOT NULL REFERENCES snapshots(id),
-    species_name                TEXT NOT NULL,
-    generation                  INTEGER,
-    creature_uid                INTEGER NOT NULL,
-    is_alive                    INTEGER NOT NULL,
-    fitness                     REAL NOT NULL,
-    lifetime                    REAL NOT NULL,
-    food_eaten                  INTEGER NOT NULL,
-    computed_food_eaten         REAL NOT NULL,
-    times_eating_for_nothing    INTEGER NOT NULL,
-    enemies_touched             INTEGER NOT NULL,
-    computed_enemies_touched    REAL NOT NULL,
-    times_attacking_for_nothing INTEGER NOT NULL,
-    tiles_covered               INTEGER NOT NULL,
-    release_at_home_count       INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_creature_snap ON creature_snapshots(snapshot_id, species_name, creature_uid);
-
-CREATE TABLE IF NOT EXISTS genomes (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id  INTEGER NOT NULL REFERENCES snapshots(id),
-    species_name TEXT NOT NULL,
-    generation   INTEGER NOT NULL,
-    rank         INTEGER NOT NULL,
-    fitness      REAL NOT NULL,
-    brain        BLOB NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_genomes_snapshot ON genomes(snapshot_id, species_name, generation);
-            """)
+            self.conn.executescript(schema_sql)
 
     def start_run(self, notes: str = "") -> int:
         """Insert a new run row and return its id."""
@@ -227,13 +139,33 @@ CREATE INDEX IF NOT EXISTS idx_genomes_snapshot ON genomes(snapshot_id, species_
                         mb_rows,
                     )
 
-                # --- creature_snapshots ---
+                # --- creatures ---
+                self.conn.execute(
+                    "UPDATE creatures SET is_alive = 0 WHERE run_id = ? AND species_name = ?",
+                    (run_id, species_name)
+                )
+
                 cs_rows = []
                 for c in living:
                     fitness = float(c.compute_fitness())
                     cs_rows.append((
-                        snapshot_id, species_name, generation,
+                        run_id, species_name, generation,
                         c.creature_uid, 1, fitness,
+                        float(getattr(c, "survival_time", 0.0)),
+                        int(getattr(c, "food_eaten", 0)),
+                        float(getattr(c, "computed_food_eaten", 0.0)),
+                        int(getattr(c, "times_eating_for_nothing", 0)),
+                        int(getattr(c, "enemies_touched", 0)),
+                        float(getattr(c, "computed_enemies_touched", 0.0)),
+                        int(getattr(c, "times_attacking_for_nothing", 0)),
+                        int(getattr(c, "tiles_covered", 0)),
+                        int(getattr(c, "release_at_home_count", 0)),
+                    ))
+                for c in world.dead_creatures.get(cls, []):
+                    fitness = float(c.compute_fitness())
+                    cs_rows.append((
+                        run_id, species_name, generation,
+                        c.creature_uid, 0, fitness,
                         float(getattr(c, "survival_time", 0.0)),
                         int(getattr(c, "food_eaten", 0)),
                         float(getattr(c, "computed_food_eaten", 0.0)),
@@ -246,12 +178,24 @@ CREATE INDEX IF NOT EXISTS idx_genomes_snapshot ON genomes(snapshot_id, species_
                     ))
                 if cs_rows:
                     self.conn.executemany(
-                        "INSERT INTO creature_snapshots "
-                        "(snapshot_id, species_name, generation, creature_uid, is_alive, fitness, "
+                        "INSERT INTO creatures "
+                        "(run_id, species_name, generation, creature_uid, is_alive, fitness, "
                         "lifetime, food_eaten, computed_food_eaten, times_eating_for_nothing, "
                         "enemies_touched, computed_enemies_touched, times_attacking_for_nothing, "
                         "tiles_covered, release_at_home_count) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(run_id, creature_uid) DO UPDATE SET "
+                        "is_alive = excluded.is_alive, "
+                        "fitness = excluded.fitness, "
+                        "lifetime = excluded.lifetime, "
+                        "food_eaten = excluded.food_eaten, "
+                        "computed_food_eaten = excluded.computed_food_eaten, "
+                        "times_eating_for_nothing = excluded.times_eating_for_nothing, "
+                        "enemies_touched = excluded.enemies_touched, "
+                        "computed_enemies_touched = excluded.computed_enemies_touched, "
+                        "times_attacking_for_nothing = excluded.times_attacking_for_nothing, "
+                        "tiles_covered = excluded.tiles_covered, "
+                        "release_at_home_count = excluded.release_at_home_count",
                         cs_rows,
                     )
 
