@@ -52,6 +52,7 @@
 
           <input type="file" id="fileLoad" accept=".json" style="display:none;">
           <button class="btn" id="btnLoad">📂 Load</button>
+          <button class="btn" id="btnLoadDB">🗄 Load DB</button>
           <button class="btn" id="btnSave">💾 Save</button>
         </div>
       </header>
@@ -338,6 +339,24 @@
           <button class="btn" id="btnCancelSave">Cancel</button>
           <button class="btn" id="btnConfirmSave"
             style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loadDbModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-title">Load Run from DB</div>
+        <div class="modal-body">
+          <select id="loadDbRunId" class="input-field"></select>
+          <div style="margin-top: 10px;">
+            <input type="checkbox" id="loadDbResetStats">
+            <label for="loadDbResetStats" style="font-size: 0.9rem;">Reset stats (Branch to new run)</label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="btnCancelLoadDb">Cancel</button>
+          <button class="btn" id="btnConfirmLoadDb"
+            style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Load</button>
         </div>
       </div>
     </div>

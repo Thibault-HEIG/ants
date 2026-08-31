@@ -1,0 +1,2 @@
+-- Active: 1788208739513@@127.0.0.1@3306
+-- Create pre-made SQL queries to update metrics bounds

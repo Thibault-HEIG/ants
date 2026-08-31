@@ -2,8 +2,12 @@
 serialization.py — Snapshot Builder
 ===================================
 
-Builds full and aggregate simulation snapshots to decouple game logic
-from the rendering loop and network transmission.
+Builds full and aggregate simulation snapshots for the rendering channel
+(WebSocket, BROADCAST_INTERVAL cadence). Contains only creature positions,
+food, pheromones, kingdoms, lakes, and lightweight population counts.
+
+Stats, training metrics, and metric bounds are written to SQLite by
+core/tracking_db.py on a separate wall-clock timer.
 """
 
 from __future__ import annotations
@@ -16,10 +20,6 @@ import numpy as np
 from core.constants import FRAMES_PER_DT, GENERATION_DURATION, WORLD_HEIGHT, WORLD_WIDTH
 from core.utils import SpeciesStats
 
-_stats_cache: dict[str, tuple[float, dict]] = {}  # species_name -> (timestamp, stats_dict)
-_bounds_cache: dict[str, tuple[float, dict]] = {}  # species_name -> (timestamp, bounds_dict)
-_STATS_CACHE_TTL: float = 1.0  # seconds
-
 
 def _json_encode(snapshot: dict[str, Any]) -> str:
     """Encode a snapshot dictionary to a JSON string."""
@@ -30,8 +30,12 @@ def _json_encode(snapshot: dict[str, Any]) -> str:
 encode = _json_encode
 
 
-def _compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
-    """Compute living/dead population and all-time best/average vitals & fitness for a species."""
+def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
+    """Compute living/dead population and all-time best/average vitals & fitness for a species.
+
+    Shared by the rendering snapshot (lightweight population subset) and
+    tracking_db (full stats write).
+    """
     species_name = getattr(cls, "species_name", cls.__name__)
     living = world.creatures.get(cls, [])
     dead = world.dead_creatures.get(cls, [])
@@ -109,7 +113,7 @@ def _compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         "avgReleaseAtHome": float(avg_release),
     }
 
-def _compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
+def compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
     """Compute the actual max vs bound values for species metrics."""
     species_name = getattr(cls, "species_name", cls.__name__)
     bounds_table = getattr(cls, "metrics", {})
@@ -130,11 +134,15 @@ def _compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]
 
 
 def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, Any]:
-    """Build a full snapshot for rendering at normal speeds."""
+    """Build a full snapshot for rendering at normal speeds.
+
+    Contains creature positions/direction/hp/action-flags, food items,
+    pheromone grid, kingdoms, lakes, and lightweight population counts.
+    Stats, training metrics, and metric bounds are served via HTTP from SQLite.
+    """
     creatures_dict = {}
     top_fit_dict = {}
-    stats_dict = {}
-    bounds_dict = {}
+    population_dict = {}
 
     for cls in world.active_species:
         species_name = getattr(cls, "species_name", cls.__name__)
@@ -165,21 +173,11 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         fit_scores.sort(key=lambda x: x[0], reverse=True)
         top_fit_dict[species_name] = [idx for _, idx in fit_scores[:3]]
 
-        # Use cached stats if available and fresh
-        now = world.round_time
-        cached_stats = _stats_cache.get(species_name)
-        if cached_stats is not None and (now - cached_stats[0]) < _STATS_CACHE_TTL:
-            stats_dict[species_name] = cached_stats[1]
-        else:
-            stats_dict[species_name] = _compute_species_stats(world, cls)
-            _stats_cache[species_name] = (now, stats_dict[species_name])
-
-        cached_bounds = _bounds_cache.get(species_name)
-        if cached_bounds is not None and (now - cached_bounds[0]) < _STATS_CACHE_TTL:
-            bounds_dict[species_name] = cached_bounds[1]
-        else:
-            bounds_dict[species_name] = _compute_metric_bounds(world, cls)
-            _bounds_cache[species_name] = (now, bounds_dict[species_name])
+        # Lightweight population counts duplicated from SQLite for real-time display
+        population_dict[species_name] = {
+            "alive": len(living),
+            "maxPop": getattr(cls, "max_population", 100),
+        }
 
     food_list = []
     for f in world.food_items:
@@ -250,71 +248,25 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
             "height": grid.shape[1],
             "data": ph_data,
         },
-        "stats": stats_dict,
+        "population": population_dict,
         "topFit": top_fit_dict,
-        "metricBounds": bounds_dict,
-        "trainingHistory": _build_training_delta(simulation, world),
     }
-
-
-def _build_training_delta(simulation: Any, world: Any) -> dict[str, Any]:
-    """Build an incremental delta of training history since the last broadcast."""
-    start_idx = getattr(simulation, "_last_sent_training_idx", 0)
-    reset_flag = getattr(simulation, "_training_reset_flag", False)
-    history_time = getattr(simulation, "history_time", [])
-    history_training = getattr(simulation, "history_training", {})
-
-    time_slice = history_time[start_idx:]
-
-    delta: dict[str, Any] = {
-        "startIdx": start_idx,
-        "reset": reset_flag,
-        "time": time_slice,
-    }
-
-    for cls in world.active_species:
-        species_name = getattr(cls, "species_name", cls.__name__)
-        species_training = history_training.get(species_name, {})
-        species_delta: dict[str, list] = {}
-        for key, arr in species_training.items():
-            species_delta[key] = arr[start_idx:]
-        delta[species_name] = species_delta
-
-    # Advance the cursor for next broadcast
-    simulation._last_sent_training_idx = len(history_time)
-    simulation._training_reset_flag = False
-
-    return delta
 
 
 def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, Any]:
-    """Build an aggregate snapshot for fast simulation (ultra mode)."""
-    stats_dict = {}
-    bounds_dict = {}
+    """Build an aggregate snapshot for fast simulation (ultra mode).
 
+    Contains only metadata and population counts — no creature positions,
+    food, or pheromones. Stats and training data are in SQLite.
+    """
+    population_dict = {}
     for cls in world.active_species:
         species_name = getattr(cls, "species_name", cls.__name__)
-        
-        # Use cached stats if available and fresh
-        now = world.round_time
-        cached_stats = _stats_cache.get(species_name)
-        if cached_stats is not None and (now - cached_stats[0]) < _STATS_CACHE_TTL:
-            stats_dict[species_name] = cached_stats[1]
-        else:
-            stats_dict[species_name] = _compute_species_stats(world, cls)
-            _stats_cache[species_name] = (now, stats_dict[species_name])
-
-        cached_bounds = _bounds_cache.get(species_name)
-        if cached_bounds is not None and (now - cached_bounds[0]) < _STATS_CACHE_TTL:
-            bounds_dict[species_name] = cached_bounds[1]
-        else:
-            bounds_dict[species_name] = _compute_metric_bounds(world, cls)
-            _bounds_cache[species_name] = (now, bounds_dict[species_name])
-
-    ant_best = stats_dict.get("Ant", {}).get("bestFitness", 0.0)
-    ant_avg = stats_dict.get("Ant", {}).get("avgFitness", 0.0)
-    spider_best = stats_dict.get("Spider", {}).get("bestFitness", 0.0)
-    spider_avg = stats_dict.get("Spider", {}).get("avgFitness", 0.0)
+        living = world.creatures.get(cls, [])
+        population_dict[species_name] = {
+            "alive": len(living),
+            "maxPop": getattr(cls, "max_population", 100),
+        }
 
     return {
         "type": "aggregate",
@@ -327,22 +279,5 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
         "multiplierCapped": getattr(simulation, "multiplier_capped", False),
         "ultra": True,
         "paused": paused,
-        "stats": stats_dict,
-        "metricBounds": bounds_dict,
-        "chart": {
-            "time": world.round_time,
-            "antBest": ant_best,
-            "antAvg": ant_avg,
-            "spiderBest": spider_best,
-            "spiderAvg": spider_avg,
-        },
-        "trainingHistory": {
-            "time": list(getattr(simulation, "history_time", [])),
-            **{
-                getattr(cls, "species_name", cls.__name__):
-                    getattr(simulation, "history_training", {}).get(
-                        getattr(cls, "species_name", cls.__name__), {})
-                for cls in world.active_species
-            },
-        },
+        "population": population_dict,
     }

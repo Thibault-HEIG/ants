@@ -30,8 +30,95 @@ SIMULATION: Simulation | None = None
 IS_PAUSED: bool = False
 
 
+TRACKING_DB: Any | None = None
+CURRENT_RUN_ID: int | None = None
+
 class StaticFileHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve static files from the project directory (web/ and assets/)."""
+    """Serve static files from the project directory (web/ and assets/) and API."""
+
+    def do_GET(self) -> None:
+        if self.path.startswith("/api/"):
+            self.handle_api_request()
+            return
+        super().do_GET()
+
+    def handle_api_request(self) -> None:
+        global TRACKING_DB
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        
+        if TRACKING_DB is None:
+            self.wfile.write(b"[]")
+            return
+            
+        try:
+            parts = self.path.split("?")[0].strip("/").split("/")
+            if len(parts) == 2 and parts[1] == "runs":
+                cursor = TRACKING_DB.conn.execute("SELECT id, started_at, ended_at, notes FROM runs ORDER BY id DESC")
+                data = [{"id": r[0], "started_at": r[1], "ended_at": r[2], "notes": r[3]} for r in cursor.fetchall()]
+                self.wfile.write(json.dumps(data).encode("utf-8"))
+            elif len(parts) >= 3 and parts[1] == "runs":
+                run_id = int(parts[2])
+                endpoint = parts[3] if len(parts) > 3 else None
+                
+                if endpoint == "stats":
+                    cursor = TRACKING_DB.conn.execute("""
+                        SELECT s.time, l.species_name, l.alive, l.max_pop, 
+                               l.fitness_best, l.fitness_avg, l.lifetime_best, l.lifetime_avg,
+                               l.food_best, l.food_avg, l.enemies_best, l.enemies_avg,
+                               l.tiles_best, l.tiles_avg, l.release_home_best, l.release_home_avg
+                        FROM live_stats l JOIN snapshots s ON l.snapshot_id = s.id
+                        WHERE s.run_id = ? ORDER BY s.time ASC
+                    """, (run_id,))
+                    cols = [c[0] for c in cursor.description]
+                    data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    self.wfile.write(json.dumps(data).encode("utf-8"))
+                elif endpoint == "training":
+                    cursor = TRACKING_DB.conn.execute("""
+                        SELECT s.time, t.species_name, t.generation, t.metric, 
+                               t.best, t.avg, t.best_lifetime, t.avg_lifetime
+                        FROM training_metrics t JOIN snapshots s ON t.snapshot_id = s.id
+                        WHERE s.run_id = ? ORDER BY s.time ASC
+                    """, (run_id,))
+                    cols = [c[0] for c in cursor.description]
+                    data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    self.wfile.write(json.dumps(data).encode("utf-8"))
+                elif endpoint == "bounds":
+                    cursor = TRACKING_DB.conn.execute("""
+                        SELECT b.species_name, b.metric, b.max_observed, b.bound
+                        FROM metric_bounds b JOIN snapshots s ON b.snapshot_id = s.id
+                        WHERE s.run_id = ? AND s.id = (SELECT id FROM snapshots WHERE run_id = ? ORDER BY time DESC LIMIT 1)
+                    """, (run_id, run_id))
+                    cols = [c[0] for c in cursor.description]
+                    data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    self.wfile.write(json.dumps(data).encode("utf-8"))
+                elif endpoint == "creatures":
+                    cursor = TRACKING_DB.conn.execute("""
+                        SELECT s.time, c.species_name, c.creature_uid, c.fitness, c.lifetime, c.food_eaten
+                        FROM creature_snapshots c JOIN snapshots s ON c.snapshot_id = s.id
+                        WHERE s.run_id = ? ORDER BY s.time ASC
+                    """, (run_id,))
+                    cols = [c[0] for c in cursor.description]
+                    data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    self.wfile.write(json.dumps(data).encode("utf-8"))
+                elif endpoint == "genomes":
+                    cursor = TRACKING_DB.conn.execute("""
+                        SELECT s.time, g.species_name, g.generation, g.rank, g.fitness
+                        FROM genomes g JOIN snapshots s ON g.snapshot_id = s.id
+                        WHERE s.run_id = ? ORDER BY s.time ASC
+                    """, (run_id,))
+                    cols = [c[0] for c in cursor.description]
+                    data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+                    self.wfile.write(json.dumps(data).encode("utf-8"))
+                else:
+                    self.wfile.write(b"[]")
+            else:
+                self.wfile.write(b"[]")
+        except Exception as e:
+            logger.error(f"API Error: {e}")
+            self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
 
     def translate_path(self, path: str) -> str:
         # Serve root request from web/index.html
@@ -122,6 +209,25 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
             except Exception as exc:
                 logger.error(f"Load failed: {exc}")
                 await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": f"Load failed: {exc}"}))
+
+    elif msg_type == "load_from_db":
+        run_id = data.get("run_id")
+        reset_stats = data.get("reset_stats", False)
+        if run_id:
+            try:
+                SIMULATION.load_from_db(TRACKING_DB, run_id, reset_stats=reset_stats)
+                global CURRENT_RUN_ID
+                if reset_stats:
+                    TRACKING_DB.end_run(CURRENT_RUN_ID)
+                    CURRENT_RUN_ID = TRACKING_DB.start_run(notes=f"Branched from run {run_id}")
+                else:
+                    CURRENT_RUN_ID = run_id
+                    
+                SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls)
+                await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": f"Loaded DB run {run_id}"}))
+            except Exception as exc:
+                logger.error(f"DB Load failed: {exc}")
+                await websocket.send(json.dumps({"type": "load_result", "ok": False, "message": f"DB Load failed: {exc}"}))
 
     elif msg_type == "reload_with_changes":
         import sys, os
@@ -279,15 +385,34 @@ async def broadcast_loop() -> None:
         await asyncio.sleep(interval)
 
 
+async def stats_write_loop() -> None:
+    """Async loop writing snapshots to tracking DB on STATS_INTERVAL cadence."""
+    global SIMULATION, TRACKING_DB, CURRENT_RUN_ID, IS_PAUSED
+    from core.constants import STATS_INTERVAL
+
+    interval = float(STATS_INTERVAL)
+    while True:
+        if SIMULATION is not None and SIMULATION.running and not IS_PAUSED and CURRENT_RUN_ID is not None:
+            try:
+                await asyncio.to_thread(TRACKING_DB.write_snapshot, SIMULATION.world, SIMULATION, CURRENT_RUN_ID)
+            except Exception as e:
+                logger.error(f"Error writing to tracking DB: {e}")
+        await asyncio.sleep(interval)
+
+
 RELOAD_RESULT: dict | None = None
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = None) -> None:
-    global SIMULATION, RELOAD_RESULT
+    global SIMULATION, RELOAD_RESULT, TRACKING_DB, CURRENT_RUN_ID
     import os
+    from core.tracking_db import TrackingDB
 
     is_reload = (load_path is not None and load_path.endswith("_reload_state.json"))
     old_constants_snapshot = None
+    
+    TRACKING_DB = TrackingDB()
+    CURRENT_RUN_ID = TRACKING_DB.start_run(notes="Standard run" if not is_reload else "Reloaded run")
 
     if is_reload and os.path.exists(load_path):
         # Read the saved constants snapshot before we load (and potentially overwrite)
@@ -329,6 +454,8 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
             os.unlink(load_path)
         except OSError:
             pass
+            
+    SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls)
 
     http_port = start_http_server(host, port)
     logger.info(f"WebSocket Server starting at ws://{host}:{port}")
@@ -338,13 +465,17 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
             await asyncio.gather(
                 simulation_loop(),
                 broadcast_loop(),
+                stats_write_loop(),
             )
 
     try:
         asyncio.run(main_async())
     except KeyboardInterrupt:
         logger.info("Server shut down cleanly.")
-
+    finally:
+        if CURRENT_RUN_ID is not None and TRACKING_DB is not None:
+            TRACKING_DB.end_run(CURRENT_RUN_ID)
+            TRACKING_DB.close()
 
 if __name__ == "__main__":
     run_server()

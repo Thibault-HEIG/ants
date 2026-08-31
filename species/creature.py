@@ -31,7 +31,17 @@ from evolution.sensors import Sensors
 
 if TYPE_CHECKING:
     from evolution.sensors import SensorData
-    
+
+# Per-run monotonic counter for stable creature identity across generational respawns
+_next_creature_uid: int = 0
+
+
+def reset_creature_uid_counter() -> None:
+    """Reset the creature UID counter to zero (called once per new run)."""
+    global _next_creature_uid
+    _next_creature_uid = 0
+
+
 class Creature(ABC):
     """Abstract base class representing an evolving autonomous agent.
 
@@ -85,6 +95,11 @@ class Creature(ABC):
         self.can_take: bool = can_take
         self.can_make: bool = can_make
         self.can_eat: bool = can_eat
+
+        # --- Stable identity ---
+        global _next_creature_uid
+        self.creature_uid: int = _next_creature_uid
+        _next_creature_uid += 1
 
         # --- Spatial state ---
         self.position: np.ndarray = position.astype(float)
