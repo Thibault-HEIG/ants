@@ -73,6 +73,8 @@ lives in code, not here.
 - `Creature` / `Entity` abstraction boundary stays intact.
 - `world/physics.py` and `evolution/sensors.py` never hardcode species types.
 - `web/renderer.js` is read-only: renders from snapshot data, never mutates simulation state.
-- `server.py` owns the WebSocket broadcast loop and client message handling.
+- Rendering (WebSocket JSON) is strictly decoupled from tracking (SQLite WAL/HTTP API). Client never accumulates stats or history.
+- `server.py` owns the WebSocket broadcast loop, client message handling, and HTTP API endpoints.
   Simulation logic stays in `core/simulation.py` and `world/world.py`.
+- `core/tracking_db.py` owns all persistent analytics, stats aggregations, and genome checkpointing.
 - `core/simulation.py` is the only place species get registered/activated.
