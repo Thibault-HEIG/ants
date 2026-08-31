@@ -88,9 +88,9 @@ class StaticFileHandler(http.server.SimpleHTTPRequestHandler):
                 elif endpoint == "bounds":
                     cursor = TRACKING_DB.conn.execute("""
                         SELECT b.species_name, b.metric, b.max_observed, b.bound
-                        FROM metric_bounds b JOIN snapshots s ON b.snapshot_id = s.id
-                        WHERE s.run_id = ? AND s.id = (SELECT id FROM snapshots WHERE run_id = ? ORDER BY time DESC LIMIT 1)
-                    """, (run_id, run_id))
+                        FROM metric_bounds b
+                        WHERE b.run_id = ?
+                    """, (run_id,))
                     cols = [c[0] for c in cursor.description]
                     data = [dict(zip(cols, row)) for row in cursor.fetchall()]
                     self.wfile.write(json.dumps(data).encode("utf-8"))
@@ -105,9 +105,9 @@ class StaticFileHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps(data).encode("utf-8"))
                 elif endpoint == "genomes":
                     cursor = TRACKING_DB.conn.execute("""
-                        SELECT s.time, g.species_name, g.generation, g.rank, g.fitness
-                        FROM genomes g JOIN snapshots s ON g.snapshot_id = s.id
-                        WHERE s.run_id = ? ORDER BY s.time ASC
+                        SELECT (g.generation * 150) as time, g.species_name, g.generation, g.rank, g.fitness
+                        FROM genomes g
+                        WHERE g.run_id = ? ORDER BY g.generation ASC, g.rank ASC
                     """, (run_id,))
                     cols = [c[0] for c in cursor.description]
                     data = [dict(zip(cols, row)) for row in cursor.fetchall()]
@@ -157,7 +157,7 @@ def start_http_server(host: str, port: int) -> int:
 
 
 async def handle_client_message(websocket: websockets.WebSocketServerProtocol, raw_msg: str) -> None:
-    global IS_PAUSED, SIMULATION
+    global IS_PAUSED, SIMULATION, CURRENT_RUN_ID
     if SIMULATION is None:
         return
 
@@ -183,12 +183,26 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "toggle_ultra":
         SIMULATION.ultra_mode = not SIMULATION.ultra_mode
 
-    elif msg_type == "save_full_state":
-        filename = data.get("filename")
-        notes = data.get("notes", "")
-        saved_file = SIMULATION.save_full_state(filename=filename, notes=notes)
-        await websocket.send(json.dumps({"type": "save_result", "ok": True, "path": saved_file}))
-
+    elif msg_type == "delete_current_run":
+        try:
+            SIMULATION.running = False
+            # Yield briefly to let any background DB write finish before we delete
+            await asyncio.sleep(0.1)
+            
+            TRACKING_DB.delete_run(CURRENT_RUN_ID)
+            
+            await websocket.send(json.dumps({"type": "delete_result", "ok": True}))
+            
+            try:
+                TRACKING_DB.close()
+            except Exception:
+                pass
+                
+            import os
+            os._exit(0)
+        except Exception as exc:
+            logger.error(f"Delete run failed: {exc}")
+            await websocket.send(json.dumps({"type": "delete_result", "ok": False, "message": str(exc)}))
     elif msg_type == "print_population":
         SIMULATION._print_metric_recap()
 
@@ -200,7 +214,6 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
         if run_id:
             try:
                 SIMULATION.load_from_db(TRACKING_DB, run_id, reset_stats=reset_stats)
-                global CURRENT_RUN_ID
                 if reset_stats:
                     TRACKING_DB.end_run(CURRENT_RUN_ID)
                     CURRENT_RUN_ID = TRACKING_DB.start_run(notes=f"Branched from run {run_id}")

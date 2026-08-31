@@ -56,6 +56,20 @@ class TrackingDB:
                 (datetime.utcnow().isoformat(), run_id),
             )
 
+    def delete_run(self, run_id: int) -> None:
+        """Delete a run and all its associated data (cascading)."""
+        with self.conn:
+            self.conn.execute("PRAGMA foreign_keys=ON")
+            # Deleting from runs will cascade if ON DELETE CASCADE is set,
+            # but since it might not be, we explicitly delete snapshots
+            self.conn.execute("DELETE FROM genomes WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM creatures WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM metric_bounds WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM live_stats WHERE snapshot_id IN (SELECT id FROM snapshots WHERE run_id = ?)", (run_id,))
+            self.conn.execute("DELETE FROM training_metrics WHERE snapshot_id IN (SELECT id FROM snapshots WHERE run_id = ?)", (run_id,))
+            self.conn.execute("DELETE FROM snapshots WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+
     def write_snapshot(self, world: Any, simulation: Any, run_id: int) -> None:
         """Batch-write all tracking data for the current tick in a single transaction.
 
@@ -66,6 +80,8 @@ class TrackingDB:
         from core.simulation import TRAINING_METRICS
 
         with self.conn:
+            if not simulation.running:
+                return
             cursor = self.conn.execute(
                 "INSERT INTO snapshots (run_id, time) VALUES (?, ?)",
                 (run_id, float(world.round_time)),
@@ -128,14 +144,18 @@ class TrackingDB:
                 mb_rows = []
                 for metric_name, bound_data in bounds.items():
                     mb_rows.append((
-                        snapshot_id, species_name, generation, metric_name,
+                        run_id, species_name, generation, metric_name,
                         bound_data["max"], bound_data["bound"],
                     ))
                 if mb_rows:
                     self.conn.executemany(
                         "INSERT INTO metric_bounds "
-                        "(snapshot_id, species_name, generation, metric, max_observed, bound) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        "(run_id, species_name, generation, metric, max_observed, bound) "
+                        "VALUES (?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(run_id, species_name, metric) DO UPDATE SET "
+                        "generation = excluded.generation, "
+                        "max_observed = excluded.max_observed, "
+                        "bound = excluded.bound",
                         mb_rows,
                     )
 
@@ -202,12 +222,6 @@ class TrackingDB:
     def write_genomes(self, world: Any, run_id: int, species_cls: type) -> None:
         """Write a genome checkpoint for a species, ranked by fitness descending."""
         with self.conn:
-            cursor = self.conn.execute(
-                "INSERT INTO snapshots (run_id, time) VALUES (?, ?)",
-                (run_id, float(world.round_time)),
-            )
-            snapshot_id = cursor.lastrowid
-
             species_name = getattr(species_cls, "species_name", species_cls.__name__)
             generation = int(world.round_time / GENERATION_DURATION) + 1
             living = world.creatures.get(species_cls, [])
@@ -218,12 +232,12 @@ class TrackingDB:
                 fitness = float(c.compute_fitness())
                 brain_blob = c.genome.tobytes()
                 g_rows.append((
-                    snapshot_id, species_name, generation, rank, fitness, brain_blob,
+                    run_id, species_name, generation, rank, fitness, brain_blob,
                 ))
             if g_rows:
                 self.conn.executemany(
                     "INSERT INTO genomes "
-                    "(snapshot_id, species_name, generation, rank, fitness, brain) "
+                    "(run_id, species_name, generation, rank, fitness, brain) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     g_rows,
                 )
@@ -269,8 +283,8 @@ class TrackingDB:
         # Restore from metric_bounds
         cursor.execute(
             "SELECT species_name, metric, max_observed "
-            "FROM metric_bounds WHERE snapshot_id = ?",
-            (latest_snap,),
+            "FROM metric_bounds WHERE run_id = ?",
+            (run_id,),
         )
         for r in cursor.fetchall():
             s_name, metric, max_obs = r[0], r[1], float(r[2])

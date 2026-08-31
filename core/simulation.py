@@ -266,8 +266,10 @@ class Simulation:
         for cls in self.active_species:
             sp_name = getattr(cls, "species_name", cls.__name__)
             cursor.execute(
-                "SELECT brain FROM genomes WHERE snapshot_id = ? AND species_name = ? ORDER BY rank ASC", 
-                (snapshot_id, sp_name)
+                "SELECT brain FROM genomes WHERE run_id = ? AND species_name = ? "
+                "AND generation = (SELECT MAX(generation) FROM genomes WHERE run_id = ? AND species_name = ?) "
+                "ORDER BY rank ASC", 
+                (run_id, sp_name, run_id, sp_name)
             )
             for g_row in cursor.fetchall():
                 try:

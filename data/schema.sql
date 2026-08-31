@@ -50,14 +50,15 @@ CREATE INDEX IF NOT EXISTS idx_livestats_snapshot ON live_stats(snapshot_id, spe
 
 CREATE TABLE IF NOT EXISTS metric_bounds (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id  INTEGER NOT NULL REFERENCES snapshots(id),
+    run_id       INTEGER NOT NULL REFERENCES runs(id),
     species_name TEXT NOT NULL,
     generation   INTEGER,
     metric       TEXT NOT NULL,
     max_observed REAL NOT NULL,
-    bound        REAL NOT NULL
+    bound        REAL NOT NULL,
+    UNIQUE(run_id, species_name, metric)
 );
-CREATE INDEX IF NOT EXISTS idx_bounds_snapshot ON metric_bounds(snapshot_id, species_name, metric);
+CREATE INDEX IF NOT EXISTS idx_bounds_run ON metric_bounds(run_id, species_name, metric);
 
 CREATE TABLE IF NOT EXISTS creatures (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,11 +83,11 @@ CREATE INDEX IF NOT EXISTS idx_creatures_run ON creatures(run_id, species_name, 
 
 CREATE TABLE IF NOT EXISTS genomes (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id  INTEGER NOT NULL REFERENCES snapshots(id),
+    run_id       INTEGER NOT NULL REFERENCES runs(id),
     species_name TEXT NOT NULL,
     generation   INTEGER NOT NULL,
     rank         INTEGER NOT NULL,
     fitness      REAL NOT NULL,
     brain        BLOB NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_genomes_snapshot ON genomes(snapshot_id, species_name, generation);
+CREATE INDEX IF NOT EXISTS idx_genomes_run ON genomes(run_id, species_name, generation);

@@ -177,6 +177,9 @@ function handleMessage(msg) {
   } else if (msg.type === "reload_result") {
     if (msg.ok) showBanner(msg.message, 'success', 6000);
     else showBanner(msg.message, 'error', 6000);
+  } else if (msg.type === "delete_result") {
+    if (msg.ok) showBanner('Run deleted successfully', 'success');
+    else showBanner('Failed to delete run: ' + msg.message, 'error');
   }
 }
 
@@ -734,24 +737,13 @@ function handleSnapshot(snap) {
       document.getElementById("zoomDisplay").innerText = Renderer.getZoomPercent();
     };
 
-    // Modals
-    const saveModal = document.getElementById("saveModal");
+    document.getElementById("btnDeleteRun").onclick = () => {
+      if (confirm("Are you sure you want to delete all data for the current run?")) {
+        ws.send(JSON.stringify({ type: 'delete_current_run' }));
+      }
+    };
+
     const controlsModal = document.getElementById("controlsModal");
-
-    document.getElementById("btnSave").onclick = () => {
-      document.getElementById("saveFilename").value = new Date().toISOString().replace(/T/, '-').replace(/:/g, '-').slice(2, 16);
-      saveModal.classList.add("open");
-    };
-    document.getElementById("btnCancelSave").onclick = () => saveModal.classList.remove("open");
-    document.getElementById("btnConfirmSave").onclick = () => {
-      ws.send(JSON.stringify({
-        type: 'save_full_state',
-        filename: document.getElementById("saveFilename").value,
-        notes: document.getElementById("saveNotes").value
-      }));
-      saveModal.classList.remove("open");
-    };
-
     document.getElementById("btnControls").onclick = () => controlsModal.classList.add("open");
     document.getElementById("btnCloseControls").onclick = () => controlsModal.classList.remove("open");
 

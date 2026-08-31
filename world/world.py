@@ -354,6 +354,14 @@ class World:
         else:
             self.repro_timers[cls] = 0.0
 
+        # Advance generation timer to trigger periodic genome checkpoints for continuous species
+        self.generation_timers[cls] += dt
+        if self.generation_timers[cls] >= GENERATION_DURATION:
+            self.generation_timers[cls] -= GENERATION_DURATION
+            self.generation_counts[cls] += 1
+            if self.on_generation_end is not None:
+                self.on_generation_end(cls)
+
     # ------------------------------------------------------------------
     # Generational reproduction (elitism + fixed-time episodes)
     # ------------------------------------------------------------------
