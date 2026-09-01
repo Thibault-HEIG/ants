@@ -115,7 +115,7 @@ class Simulation:
                         const_snap[k] = val
         return const_snap
 
-    def save_full_state(self, filename: str | None = None, notes: str = "") -> str | None:
+    def save_full_state(self, filename: str | None = None, notes: str = "", run_id: int | None = None) -> str | None:
         """Save full simulation state to a JSON file in saves/ directory."""
         import json
         import os
@@ -137,6 +137,7 @@ class Simulation:
             "timestamp": datetime.now().isoformat(),
             "round_time": float(self.world.round_time),
             "generation_counts": gen_counts,
+            "run_id": run_id,
             "species": {},
             "constants_snapshot": self._build_constants_snapshot(),
         }

@@ -181,8 +181,8 @@
         
         <div id="chartModeToggleContainer" style="display: flex; justify-content: center; gap: 10px; padding: 10px 0;">
           <span style="color: #9b8b7a; align-self: center; font-size: 12px; font-weight: bold;">CHART MODE:</span>
-          <button id="btnContinuous" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: #c4a35a; color: #1a1a1a; font-weight: bold;">Continuous</button>
-          <button id="btnGenerational" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: transparent; color: #9b8b7a; font-weight: bold;">Generational</button>
+          <button id="btnRaw" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: #c4a35a; color: #1a1a1a; font-weight: bold;">Raw</button>
+          <button id="btnSoft" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: transparent; color: #9b8b7a; font-weight: bold;">Soft</button>
         </div>
 
         <div class="tab-content active" id="tab-live-analytics">
@@ -192,6 +192,14 @@
             </div>
             <div class="chart-container populationChart">
               <canvas id="populationChart"></canvas>
+            </div>
+          </div>
+          <div class="charts" style="margin-top: 1rem;">
+            <div class="chart-container fitnessChartLinear">
+              <canvas id="fitnessChartLinear"></canvas>
+            </div>
+            <div class="chart-container populationChartLinear">
+              <canvas id="populationChartLinear"></canvas>
             </div>
           </div>
 

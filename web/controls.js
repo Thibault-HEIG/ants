@@ -105,6 +105,7 @@ let liveConstants = {};
 let previousConstants = null;
 let showSensors = false;
 let fitnessChart = null;
+let fitnessChartLinear = null;
 let activeTabId = 'tab-live-analytics';
 
 let lastSnapTime = performance.now();
@@ -113,6 +114,7 @@ let fpsVal = 0;
 
 
 let populationChart = null;
+let populationChartLinear = null;
 let trainingCharts = {};
 let trainingNeedsRedraw = { 'tab-ants-training': true, 'tab-spiders-training': true };
 let currentRunId = null;
@@ -320,15 +322,17 @@ function handleSnapshot(snap) {
   function initChart() {
     const ctxFit = document.getElementById("fitnessChart").getContext("2d");
     const ctxPop = document.getElementById("populationChart").getContext("2d");
+    const ctxFitLin = document.getElementById("fitnessChartLinear").getContext("2d");
+    const ctxPopLin = document.getElementById("populationChartLinear").getContext("2d");
 
-    const dsFit = [
+    const getDsFit = () => [
       { label: "Ant Best", borderColor: "#6fb87a", borderDash: [4, 4], data: [], borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
       { label: "Ant Avg", borderColor: "#4a7c59", data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
       { label: "Spider Best", borderColor: "#c94a4a", borderDash: [4, 4], data: [], borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
       { label: "Spider Avg", borderColor: "#8c3a3a", data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
     ];
 
-    const dsPop = [
+    const getDsPop = () => [
       { label: "Ants", borderColor: "#6fb87a", data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(111, 184, 122, 0.1)" },
       { label: "Spiders", borderColor: "#c94a4a", data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line', fill: true, backgroundColor: "rgba(201, 74, 74, 0.1)" }
     ];
@@ -337,13 +341,17 @@ function handleSnapshot(snap) {
       type: 'logarithmic',
       grid: { color: "#3d3228" },
       ticks: {
-        color: "#9b8b7a",
-        callback: function (value) {
-          if (![1, 10, 100, 1000, 10000].includes(value)) return null;
-          return value;
-        }
+        color: "#9b8b7a"
       },
       min: 1.0,
+      max: maxFitnessVal
+    };
+
+    const fitScaleConfigLinear = {
+      type: 'linear',
+      grid: { color: "#3d3228" },
+      ticks: { color: "#9b8b7a" },
+      min: 0,
       max: maxFitnessVal
     };
 
@@ -360,8 +368,23 @@ function handleSnapshot(snap) {
       grid: { color: "#3d3228" }
     };
 
-    fitnessChart = createChart(ctxFit, dsFit, fitScaleConfig, 'Fitness Tracking');
-    populationChart = createChart(ctxPop, dsPop, popScaleConfig, 'Population History');
+    const popScaleConfigLinear = {
+      type: 'linear',
+      min: 0,
+      max: maxPopVal,
+      ticks: {
+        color: "#9b8b7a",
+        callback: function (value) {
+          return Number.isInteger(value) ? value : null;
+        }
+      },
+      grid: { color: "#3d3228" }
+    };
+
+    fitnessChart = createChart(ctxFit, getDsFit(), fitScaleConfig, 'Fitness (Log)');
+    fitnessChartLinear = createChart(ctxFitLin, getDsFit(), fitScaleConfigLinear, 'Fitness (Linear)');
+    populationChart = createChart(ctxPop, getDsPop(), popScaleConfig, 'Population (Sqrt)');
+    populationChartLinear = createChart(ctxPopLin, getDsPop(), popScaleConfigLinear, 'Population (Linear)');
   }
 
   // Training chart zone definitions: maps canvas ID → { species, bestKey, avgKey, title }
@@ -439,7 +462,7 @@ function handleSnapshot(snap) {
       }
     });
   }
-  let chartRenderingMode = 'Continuous';
+  let chartRenderingMode = 'Raw';
 
   function initTrainingCharts() {
     for (const def of TRAINING_CHART_DEFS) {
@@ -449,23 +472,23 @@ function handleSnapshot(snap) {
       }
     }
 
-    const btnContinuous = document.getElementById('btnContinuous');
-    const btnGenerational = document.getElementById('btnGenerational');
-    if (btnContinuous && btnGenerational) {
-      btnContinuous.addEventListener('click', () => {
-        chartRenderingMode = 'Continuous';
-        btnContinuous.style.background = '#c4a35a';
-        btnContinuous.style.color = '#1a1a1a';
-        btnGenerational.style.background = 'transparent';
-        btnGenerational.style.color = '#9b8b7a';
+    const btnRaw = document.getElementById('btnRaw');
+    const btnSoft = document.getElementById('btnSoft');
+    if (btnRaw && btnSoft) {
+      btnRaw.addEventListener('click', () => {
+        chartRenderingMode = 'Raw';
+        btnRaw.style.background = '#c4a35a';
+        btnRaw.style.color = '#1a1a1a';
+        btnSoft.style.background = 'transparent';
+        btnSoft.style.color = '#9b8b7a';
         if (lastChartData.training.length > 0) updateTrainingCharts(lastChartData.training);
       });
-      btnGenerational.addEventListener('click', () => {
-        chartRenderingMode = 'Generational';
-        btnGenerational.style.background = '#c4a35a';
-        btnGenerational.style.color = '#1a1a1a';
-        btnContinuous.style.background = 'transparent';
-        btnContinuous.style.color = '#9b8b7a';
+      btnSoft.addEventListener('click', () => {
+        chartRenderingMode = 'Soft';
+        btnSoft.style.background = '#c4a35a';
+        btnSoft.style.color = '#1a1a1a';
+        btnRaw.style.background = 'transparent';
+        btnRaw.style.color = '#9b8b7a';
         if (lastChartData.training.length > 0) updateTrainingCharts(lastChartData.training);
       });
     }
@@ -498,7 +521,7 @@ function handleSnapshot(snap) {
       let datasetBest = [];
       let datasetAvg = [];
 
-      if (chartRenderingMode === 'Generational') {
+      if (chartRenderingMode === 'Soft') {
         const halfGen = GENERATION_DURATION / 2;
         const buckets = {};
 
@@ -604,13 +627,17 @@ function handleSnapshot(snap) {
   }
 
   function updateLiveStatsAndCharts(rows) {
-    if (!fitnessChart || !populationChart) return;
+    if (!fitnessChart || !populationChart || !fitnessChartLinear || !populationChartLinear) return;
 
     const dsFit = fitnessChart.data.datasets;
     const dsPop = populationChart.data.datasets;
+    const dsFitLin = fitnessChartLinear.data.datasets;
+    const dsPopLin = populationChartLinear.data.datasets;
 
     dsFit.forEach(ds => ds.data = []);
     dsPop.forEach(ds => ds.data = []);
+    dsFitLin.forEach(ds => ds.data = []);
+    dsPopLin.forEach(ds => ds.data = []);
 
     let maxTime = 300.0;
     let maxFit = 1.0;
@@ -630,14 +657,20 @@ function handleSnapshot(snap) {
         if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
         dsFit[0].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
         dsFit[1].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
+        dsFitLin[0].data.push({ x: t, y: Math.max(0.0, r.fitness_best) });
+        dsFitLin[1].data.push({ x: t, y: Math.max(0.0, r.fitness_avg) });
         dsPop[0].data.push({ x: t, y: r.alive });
+        dsPopLin[0].data.push({ x: t, y: r.alive });
       } else if (r.species_name === 'Spider') {
         latestSpider = r;
         if (r.fitness_best > maxFit) maxFit = r.fitness_best;
         if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
         dsFit[2].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
         dsFit[3].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
+        dsFitLin[2].data.push({ x: t, y: Math.max(0.0, r.fitness_best) });
+        dsFitLin[3].data.push({ x: t, y: Math.max(0.0, r.fitness_avg) });
         dsPop[1].data.push({ x: t, y: r.alive });
+        dsPopLin[1].data.push({ x: t, y: r.alive });
       }
     }
 
@@ -673,12 +706,18 @@ function handleSnapshot(snap) {
 
     fitnessChart.options.scales.x.max = maxTime * 1.05;
     populationChart.options.scales.x.max = maxTime * 1.05;
+    fitnessChartLinear.options.scales.x.max = maxTime * 1.05;
+    populationChartLinear.options.scales.x.max = maxTime * 1.05;
 
     fitnessChart.options.scales.y.max = maxFit * 1.2;
-    populationChart.options.scales.y.max = maxPop;
+    fitnessChartLinear.options.scales.y.max = maxFit * 1.2;
+    populationChart.options.scales.y.max = maxPop * 1.1;
+    populationChartLinear.options.scales.y.max = maxPop * 1.1;
 
     fitnessChart.update('none');
     populationChart.update('none');
+    fitnessChartLinear.update('none');
+    populationChartLinear.update('none');
   }
 
   setInterval(pollData, 2000);

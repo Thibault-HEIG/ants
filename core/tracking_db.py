@@ -29,7 +29,13 @@ class TrackingDB:
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.row_factory = sqlite3.Row
         self._init_schema()
+        self._pending_code_change_flag_run_id = None
+
+    def flag_next_snapshot_for_code_change(self, run_id: int) -> None:
+        """Flag that the next snapshot for this run_id should have recent_code_changes=1"""
+        self._pending_code_change_flag_run_id = run_id
 
     def _init_schema(self) -> None:
         """Create all tables and indexes if they don't exist."""
@@ -38,6 +44,10 @@ class TrackingDB:
             schema_sql = f.read()
         with self.conn:
             self.conn.executescript(schema_sql)
+            try:
+                self.conn.execute("ALTER TABLE snapshots ADD COLUMN recent_code_changes INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
 
     def start_run(self, notes: str = "") -> int:
         """Insert a new run row and return its id."""
@@ -82,9 +92,14 @@ class TrackingDB:
         with self.conn:
             if not simulation.running:
                 return
+                
+            code_change_flag = 1 if self._pending_code_change_flag_run_id == run_id else 0
+            if code_change_flag:
+                self._pending_code_change_flag_run_id = None
+                
             cursor = self.conn.execute(
-                "INSERT INTO snapshots (run_id, time) VALUES (?, ?)",
-                (run_id, float(world.round_time)),
+                "INSERT INTO snapshots (run_id, time, recent_code_changes) VALUES (?, ?, ?)",
+                (run_id, float(world.round_time), code_change_flag),
             )
             snapshot_id = cursor.lastrowid
 

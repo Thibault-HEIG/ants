@@ -7,9 +7,10 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL REFERENCES runs(id),
-    time   REAL NOT NULL
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id              INTEGER NOT NULL REFERENCES runs(id),
+    time                REAL NOT NULL,
+    recent_code_changes INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_run_time ON snapshots(run_id, time);
 

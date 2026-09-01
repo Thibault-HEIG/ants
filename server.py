@@ -230,7 +230,7 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
         import sys, os
         try:
             save_path = os.path.join("saves", "_reload_state.json")
-            SIMULATION.save_full_state(filename="_reload_state", notes="auto-reload")
+            SIMULATION.save_full_state(filename="_reload_state", notes="auto-reload", run_id=CURRENT_RUN_ID)
 
             await websocket.send(json.dumps({
                 "type": "reload_starting",
@@ -407,10 +407,8 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
 
     is_reload = (load_path is not None and load_path.endswith("_reload_state.json"))
     old_constants_snapshot = None
+    old_run_id = None
     
-    TRACKING_DB = TrackingDB()
-    CURRENT_RUN_ID = TRACKING_DB.start_run(notes="Standard run" if not is_reload else "Reloaded run")
-
     if is_reload and os.path.exists(load_path):
         # Read the saved constants snapshot before we load (and potentially overwrite)
         try:
@@ -418,8 +416,18 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
                 import json as _json
                 saved = _json.load(f)
                 old_constants_snapshot = saved.get("constants_snapshot", {})
+                old_run_id = saved.get("run_id")
         except Exception:
-            old_constants_snapshot = None
+            pass
+
+    TRACKING_DB = TrackingDB()
+    if is_reload and old_run_id is not None:
+        CURRENT_RUN_ID = old_run_id
+        # We tell the TrackingDB that the next snapshot for this run_id 
+        # should carry the recent_code_changes flag.
+        TRACKING_DB.flag_next_snapshot_for_code_change(CURRENT_RUN_ID)
+    else:
+        CURRENT_RUN_ID = TRACKING_DB.start_run(notes="Standard run")
 
     SIMULATION = Simulation(load_path=load_path)
 
