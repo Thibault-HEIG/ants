@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS creatures (
     times_attacking_for_nothing INTEGER NOT NULL,
     tiles_covered               INTEGER NOT NULL,
     release_at_home_count       INTEGER NOT NULL,
+    walk_in_home_direction      REAL DEFAULT 0.0,
+    walk_in_opposite_direction  REAL DEFAULT 0.0,
     UNIQUE(run_id, creature_uid)
 );
 CREATE INDEX IF NOT EXISTS idx_creatures_run ON creatures(run_id, species_name, creature_uid);

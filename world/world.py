@@ -401,6 +401,11 @@ class World:
             elites_count = max(1, int(len(pool) * GENERATIONAL_SELECTION_FRACTION))
             elite_genomes = [pool[i].genome.copy() for i in range(min(elites_count, len(pool)))]
             elites_count = len(elite_genomes)  # clamp if pool smaller than expected
+            
+            if elites_count > init_count:
+                elite_genomes = elite_genomes[:init_count]
+                elites_count = init_count
+
             children_count = init_count - elites_count
 
             # Elite genomes carried over unmutated
@@ -504,7 +509,7 @@ class World:
     def _spawn_species(self, cls: type, genomes: list[np.ndarray] | None = None) -> None:
         """Spawn initial population for a given species class."""
         target_count = getattr(cls, "initial_count", 10)
-        count = max(len(genomes), target_count) if genomes is not None and len(genomes) > 0 else target_count
+        count = target_count
         for c in self.creatures.get(cls, []):
             SpeciesStats.record_dead_creature(c)
         self.creatures[cls] = []

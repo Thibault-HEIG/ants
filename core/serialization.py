@@ -52,17 +52,7 @@ def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
     best_computed_enemies = max(SpeciesStats.max_computed_enemies.get(species_name, 0.0), max((getattr(c, "computed_enemies_touched", 0.0) for c in living), default=0.0))
     best_lifetime = max(SpeciesStats.max_lifetime.get(species_name, 0.0), max((getattr(c, "survival_time", 0.0) for c in living), default=0.0))
 
-    total_dead_count = SpeciesStats.total_dead_count.get(species_name, 0)
-    total_count = total_dead_count + len(living)
-
-    if total_count > 0:
-        avg_fitness = (SpeciesStats.sum_dead_fitness.get(species_name, 0.0) + sum(c.compute_fitness() for c in living)) / total_count
-        avg_food = (SpeciesStats.sum_dead_food.get(species_name, 0.0) + sum(getattr(c, "food_eaten", 0) for c in living)) / total_count
-        avg_computed_food = (SpeciesStats.sum_dead_computed_food.get(species_name, 0.0) + sum(getattr(c, "computed_food_eaten", 0.0) for c in living)) / total_count
-        avg_enemies = (SpeciesStats.sum_dead_enemies.get(species_name, 0.0) + sum(getattr(c, "enemies_touched", 0) for c in living)) / total_count
-        avg_computed_enemies = (SpeciesStats.sum_dead_computed_enemies.get(species_name, 0.0) + sum(getattr(c, "computed_enemies_touched", 0.0) for c in living)) / total_count
-        avg_lifetime = (SpeciesStats.sum_dead_lifetime.get(species_name, 0.0) + sum(getattr(c, "survival_time", 0.0) for c in living)) / total_count
-    elif all_creatures:
+    if all_creatures:
         avg_fitness = sum(c.compute_fitness() for c in all_creatures) / len(all_creatures)
         avg_food = sum(getattr(c, "food_eaten", 0) for c in all_creatures) / len(all_creatures)
         avg_computed_food = sum(getattr(c, "computed_food_eaten", 0.0) for c in all_creatures) / len(all_creatures)

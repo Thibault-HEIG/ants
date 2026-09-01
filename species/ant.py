@@ -121,13 +121,7 @@ class Ant(Creature):
         if not self.alive or world is None or getattr(world, "pheromone_grid", None) is None:
             return
 
-        if getattr(world, "tile_grid", None) is not None:
-            cx, cy = world.tile_grid.world_to_tile(self.position[0], self.position[1])
-        else:
-            gw, gh = world.pheromone_grid.shape
-            cell_size = getattr(world, "pheromone_cell_size", 10.0)
-            cx = int(max(0.0, min(float(gw - 1), self.position[0] / cell_size)))
-            cy = int(max(0.0, min(float(gh - 1), self.position[1] / cell_size)))
+        cx, cy = self.current_tile
 
         # Pheromone following reward on tile transition
         if self._last_tile != (cx, cy):

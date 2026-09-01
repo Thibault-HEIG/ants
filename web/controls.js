@@ -169,11 +169,19 @@ function connectWS() {
 function handleMessage(msg) {
   if (msg.type === "full" || msg.type === "aggregate") {
     handleSnapshot(msg);
+  } else if (msg.type === "request_startup_choice") {
+    document.getElementById("startupModal").classList.add("open");
+  } else if (msg.type === "start_result") {
+    if (msg.ok) document.getElementById("startupModal").classList.remove("open");
   } else if (msg.type === "save_result") {
     showBanner('State saved successfully', 'success');
   } else if (msg.type === "load_result") {
-    if (msg.ok) showBanner(msg.message || 'State loaded successfully', 'success');
-    else showBanner(msg.message || 'Load failed', 'error');
+    if (msg.ok) {
+      document.getElementById("startupModal").classList.remove("open");
+      showBanner(msg.message || 'State loaded successfully', 'success');
+    } else {
+      showBanner(msg.message || 'Load failed', 'error');
+    }
   } else if (msg.type === "reload_starting") {
     showBanner('⏳ Restarting server with code changes...', 'restarting', 0);
   } else if (msg.type === "reload_result") {
@@ -482,6 +490,7 @@ function handleSnapshot(snap) {
         btnSoft.style.background = 'transparent';
         btnSoft.style.color = '#9b8b7a';
         if (lastChartData.training.length > 0) updateTrainingCharts(lastChartData.training);
+        if (lastChartData.live.length > 0) updateLiveStatsAndCharts(lastChartData.live);
       });
       btnSoft.addEventListener('click', () => {
         chartRenderingMode = 'Soft';
@@ -490,6 +499,7 @@ function handleSnapshot(snap) {
         btnRaw.style.background = 'transparent';
         btnRaw.style.color = '#9b8b7a';
         if (lastChartData.training.length > 0) updateTrainingCharts(lastChartData.training);
+        if (lastChartData.live.length > 0) updateLiveStatsAndCharts(lastChartData.live);
       });
     }
   }
@@ -646,31 +656,73 @@ function handleSnapshot(snap) {
     let latestAnt = null;
     let latestSpider = null;
 
-    for (const r of rows) {
-      const t = r.time;
-      if (t > maxTime) maxTime = t;
-      if (r.max_pop > maxPop) maxPop = r.max_pop;
+    const GENERATION_DURATION = window.getConstant ? (window.getConstant('GENERATION_DURATION') || 300) : 300;
+    const halfGen = GENERATION_DURATION / 2;
 
-      if (r.species_name === 'Ant') {
-        latestAnt = r;
-        if (r.fitness_best > maxFit) maxFit = r.fitness_best;
-        if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
-        dsFit[0].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
-        dsFit[1].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
-        dsFitLin[0].data.push({ x: t, y: Math.max(0.0, r.fitness_best) });
-        dsFitLin[1].data.push({ x: t, y: Math.max(0.0, r.fitness_avg) });
-        dsPop[0].data.push({ x: t, y: r.alive });
-        dsPopLin[0].data.push({ x: t, y: r.alive });
-      } else if (r.species_name === 'Spider') {
-        latestSpider = r;
-        if (r.fitness_best > maxFit) maxFit = r.fitness_best;
-        if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
-        dsFit[2].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
-        dsFit[3].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
-        dsFitLin[2].data.push({ x: t, y: Math.max(0.0, r.fitness_best) });
-        dsFitLin[3].data.push({ x: t, y: Math.max(0.0, r.fitness_avg) });
-        dsPop[1].data.push({ x: t, y: r.alive });
-        dsPopLin[1].data.push({ x: t, y: r.alive });
+    const grouped = { Ant: [], Spider: [] };
+    for (const r of rows) {
+      if (grouped[r.species_name]) grouped[r.species_name].push(r);
+    }
+
+    for (const species of ['Ant', 'Spider']) {
+      const spRows = grouped[species];
+      const sOffset = species === 'Ant' ? 0 : 2;
+      const popOffset = species === 'Ant' ? 0 : 1;
+      
+      if (spRows.length > 0) {
+        if (species === 'Ant') latestAnt = spRows[spRows.length - 1];
+        if (species === 'Spider') latestSpider = spRows[spRows.length - 1];
+      }
+
+      if (chartRenderingMode === 'Soft') {
+        const buckets = {};
+        for (const r of spRows) {
+          const bIdx = Math.floor(r.time / halfGen);
+          if (!buckets[bIdx]) buckets[bIdx] = { fBest: 0, fAvg: 0, pop: 0, t: 0, c: 0, mPop: r.max_pop };
+          const b = buckets[bIdx];
+          b.fBest += r.fitness_best;
+          b.fAvg += r.fitness_avg;
+          b.pop += r.alive;
+          b.t += r.time;
+          b.c++;
+          if (r.max_pop > b.mPop) b.mPop = r.max_pop;
+        }
+
+        const sorted = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+        for (const bIdx of sorted) {
+          const b = buckets[bIdx];
+          const t = b.t / b.c;
+          const fB = b.fBest / b.c;
+          const fA = b.fAvg / b.c;
+          const pop = b.pop / b.c;
+
+          if (t > maxTime) maxTime = t;
+          if (b.mPop > maxPop) maxPop = b.mPop;
+          if (fB > maxFit) maxFit = fB;
+          if (fA > maxFit) maxFit = fA;
+
+          dsFit[sOffset].data.push({ x: t, y: Math.max(1.0, fB) });
+          dsFit[sOffset + 1].data.push({ x: t, y: Math.max(1.0, fA) });
+          dsFitLin[sOffset].data.push({ x: t, y: Math.max(0.0, fB) });
+          dsFitLin[sOffset + 1].data.push({ x: t, y: Math.max(0.0, fA) });
+          dsPop[popOffset].data.push({ x: t, y: pop });
+          dsPopLin[popOffset].data.push({ x: t, y: pop });
+        }
+      } else {
+        for (const r of spRows) {
+          const t = r.time;
+          if (t > maxTime) maxTime = t;
+          if (r.max_pop > maxPop) maxPop = r.max_pop;
+          if (r.fitness_best > maxFit) maxFit = r.fitness_best;
+          if (r.fitness_avg > maxFit) maxFit = r.fitness_avg;
+
+          dsFit[sOffset].data.push({ x: t, y: Math.max(1.0, r.fitness_best) });
+          dsFit[sOffset + 1].data.push({ x: t, y: Math.max(1.0, r.fitness_avg) });
+          dsFitLin[sOffset].data.push({ x: t, y: Math.max(0.0, r.fitness_best) });
+          dsFitLin[sOffset + 1].data.push({ x: t, y: Math.max(0.0, r.fitness_avg) });
+          dsPop[popOffset].data.push({ x: t, y: r.alive });
+          dsPopLin[popOffset].data.push({ x: t, y: r.alive });
+        }
       }
     }
 
@@ -745,9 +797,15 @@ function handleSnapshot(snap) {
       });
     });
 
-
-
-    // Controls
+    // Startup Modal
+    document.getElementById("btnStartupLoad").onclick = () => {
+      document.getElementById("btnLoadDB").click();
+    };
+    document.getElementById("btnStartupStart").onclick = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "start_new_run" }));
+      }
+    };    // Controls
     document.getElementById("btnPause").onclick = () => {
       ws.send(JSON.stringify({ type: "pause_toggle" }));
     };

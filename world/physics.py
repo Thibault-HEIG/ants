@@ -231,17 +231,14 @@ def resolve_take_release(
             if not getattr(creature, "alive", False):
                 continue
 
-            if getattr(creature, "release_signal", False) and creature.carried_object is not None:
-                at_home = False
-                if kingdom is not None:
-                    hx = kingdom.position[0] - creature.position[0]
-                    hy = kingdom.position[1] - creature.position[1]
-                    if hx * hx + hy * hy <= spawn_r_sq:
-                        at_home = True
-                if at_home:
-                    creature.carried_object.consumed = True
-                    delivered_counts[cls] = delivered_counts.get(cls, 0) + 1
-                creature.release_object(at_home)
+            if creature.carried_object is not None:
+                at_home = getattr(creature, "is_at_home", False)
+                auto_release = at_home
+                if getattr(creature, "release_signal", False) or auto_release:
+                    if at_home:
+                        creature.carried_object.consumed = True
+                        delivered_counts[cls] = delivered_counts.get(cls, 0) + 1
+                    creature.release_object(at_home)
                 
             elif getattr(creature, "take_signal", False) and creature.carried_object is None:
                 if spatial_hash is not None:

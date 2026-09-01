@@ -296,6 +296,19 @@
   </div>
 
     <!-- Modals -->
+    <div id="startupModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-title">Simulation Startup</div>
+        <div class="modal-body" style="text-align: center; margin-bottom: 20px;">
+          <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;">Would you like to load a previous simulation state from the database, or start a new run from scratch?</p>
+          <div style="display: flex; justify-content: center; gap: 15px;">
+            <button class="btn" id="btnStartupLoad" style="padding: 10px 20px; font-weight: 500;">🗄 Load Old State</button>
+            <button class="btn" id="btnStartupStart" style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);padding: 10px 20px; font-weight: 500;">▶ Start New Run</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="controlsModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-title">Keyboard Shortcuts</div>

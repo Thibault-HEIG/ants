@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
         dest="load_path",
         type=str,
         default=None,
-        help="Path to saved genomes JSON file to start the simulation from.",
+        help="Run ID to start the simulation from (optionally appending '_reload').",
     )
     parser.add_argument(
         "--host",

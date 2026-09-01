@@ -149,6 +149,7 @@ class Creature(ABC):
         self.brain_originality: float = 0.0
         self.world: Any | None = None
         self.visited_tiles: set[tuple[int, int]] = set()
+        self.current_tile: tuple[int, int] = (0, 0)
         self._last_tile: tuple[int, int] | None = None
         self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
@@ -169,7 +170,6 @@ class Creature(ABC):
         self.walk_with_object_in_opposite_home_direction: float = 0.0
         self.computed_release_anywhere: float = 0.0
         self.release_at_home_count: int = 0
-        self._prev_home_distance: float | None = None
         self.take_signal: bool = False
         self.release_signal: bool = False
         self.make_signal: bool = False
@@ -180,16 +180,7 @@ class Creature(ABC):
 
     def record_current_tile(self, world_obj: Any | None = None) -> None:
         """Record the current tile position into visited_tiles using the spatial tile grid."""
-        if world_obj is None:
-            world_obj = getattr(self, "world", None)
-        if world_obj is not None and getattr(world_obj, "tile_grid", None) is not None:
-            tile = world_obj.tile_grid.world_to_tile(self.position[0], self.position[1])
-        else:
-            cell_size = getattr(world_obj, "pheromone_cell_size", 10.0) if world_obj else 10.0
-            gx = int(max(0.0, float(self.position[0]) / cell_size))
-            gy = int(max(0.0, float(self.position[1]) / cell_size))
-            tile = (gx, gy)
-        self.visited_tiles.add(tile)
+        self.visited_tiles.add(self.current_tile)
 
     @property
     def tiles_covered(self) -> int:
@@ -247,6 +238,7 @@ class Creature(ABC):
             gw, gh = world.pheromone_grid.shape
             cx = int(clamp(self.position[0] / getattr(world, "pheromone_cell_size", 10.0), 0.0, float(gw - 1)))
             cy = int(clamp(self.position[1] / getattr(world, "pheromone_cell_size", 10.0), 0.0, float(gh - 1)))
+            self.current_tile = (cx, cy)
             sensor_data.pheromone_strength = float(world.pheromone_grid[cx, cy])
 
         # --- Carry-related sensor inputs ---
@@ -270,6 +262,8 @@ class Creature(ABC):
         home_dist_val = 0.0
         home_angle_val = 0.0
         is_at_home_val = 0.0
+        self.is_at_home = False
+        dist_to_home = 0.0
         if world is not None and hasattr(world, 'kingdoms'):
             kingdom = world.kingdoms.get(type(self))
             if kingdom is not None:
@@ -280,7 +274,8 @@ class Creature(ABC):
                 home_dist_val = max(0.0, 1.0 - dist_to_home / max_home_dist)
                 angle_to_home = math.atan2(hy, hx)
                 home_angle_val = normalize_angle(angle_to_home - self.direction) / math.pi
-                is_at_home_val = 1.0 if dist_to_home <= kingdom.spawn_radius else 0.0
+                self.is_at_home = dist_to_home <= kingdom.spawn_radius
+                is_at_home_val = 1.0 if self.is_at_home else 0.0
         sensor_data.home_distance = home_dist_val
         sensor_data.home_angle = home_angle_val
         sensor_data.is_at_home = is_at_home_val
@@ -394,18 +389,15 @@ class Creature(ABC):
                     hx = kingdom.position[0] - self.position[0]
                     hy = kingdom.position[1] - self.position[1]
                     current_home_dist = math.sqrt(hx * hx + hy * hy)
-                    if self._prev_home_distance is not None:
-                        delta = self._prev_home_distance - current_home_dist
-                        if delta > 0:
-                            self.walk_with_object_in_home_direction += delta
-                        elif delta < 0:
-                            self.walk_with_object_in_opposite_home_direction += abs(delta)
-                    self._prev_home_distance = current_home_dist
+                    # dist_to_home was computed at the start of the tick for the sensors
+                    delta = dist_to_home - current_home_dist
+                    if delta > 0:
+                        self.walk_with_object_in_home_direction += delta
+                    elif delta < 0:
+                        self.walk_with_object_in_opposite_home_direction += abs(delta)
             # Sync carried object position
             self.carried_object.position[0] = self.position[0]
             self.carried_object.position[1] = self.position[1]
-        else:
-            self._prev_home_distance = None
 
         # --- Health decay (always applies, even while eating) ---
         self.health -= HEALTH_DECAY_RATE * dt
@@ -452,13 +444,6 @@ class Creature(ABC):
         self.carried_object = obj
         self.computed_taken_object += computed_increment
         obj.being_carried = True
-        # Initialize home-distance tracking reference point
-        if self.world is not None and hasattr(self.world, 'kingdoms'):
-            kingdom = self.world.kingdoms.get(type(self))
-            if kingdom is not None:
-                hx = kingdom.position[0] - self.position[0]
-                hy = kingdom.position[1] - self.position[1]
-                self._prev_home_distance = math.sqrt(hx * hx + hy * hy)
 
     def release_object(self, at_home: bool) -> None:
         """Release the carried object; tracks fitness event based on location."""
@@ -502,7 +487,7 @@ class Creature(ABC):
         
         """Map self's metric_name value to [0, 1+] using self.metrics table and root curve."""
         """"1 is not the max, but a reference point for normalization. Values above 1 are possible."""
-        p = 0.3  # Concave mapping exponent
+        p = 0.5  # Concave mapping exponent
         if value <= 0.0 or max_value <= 0.0:
             return 0.0
         return max(0.0, (float(value) / max_value) ** p)
@@ -534,8 +519,11 @@ class Creature(ABC):
 
     def _check_cached_fitness(self, force: bool = False) -> float | None:
         world = getattr(self, "world", None)
-        if not force and self._cached_fitness is not None and world is not None and (world.round_time - self._last_fitness_calc_time) < 2.0:
-            return self._cached_fitness
+        if not force and self._cached_fitness is not None:
+            if not getattr(self, "alive", False):
+                return self._cached_fitness
+            if world is not None and (world.round_time - self._last_fitness_calc_time) < 2.0:
+                return self._cached_fitness
         return None
 
     def _store_cached_fitness(self, fitness: float) -> float:

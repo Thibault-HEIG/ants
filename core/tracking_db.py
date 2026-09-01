@@ -195,6 +195,8 @@ class TrackingDB:
                         int(getattr(c, "times_attacking_for_nothing", 0)),
                         int(getattr(c, "tiles_covered", 0)),
                         int(getattr(c, "release_at_home_count", 0)),
+                        float(getattr(c, "walk_with_object_in_home_direction", 0.0)),
+                        float(getattr(c, "walk_with_object_in_opposite_home_direction", 0.0)),
                     ))
                 for c in world.dead_creatures.get(cls, []):
                     fitness = float(c.compute_fitness())
@@ -210,6 +212,8 @@ class TrackingDB:
                         int(getattr(c, "times_attacking_for_nothing", 0)),
                         int(getattr(c, "tiles_covered", 0)),
                         int(getattr(c, "release_at_home_count", 0)),
+                        float(getattr(c, "walk_with_object_in_home_direction", 0.0)),
+                        float(getattr(c, "walk_with_object_in_opposite_home_direction", 0.0)),
                     ))
                 if cs_rows:
                     self.conn.executemany(
@@ -217,8 +221,8 @@ class TrackingDB:
                         "(run_id, species_name, generation, creature_uid, is_alive, fitness, "
                         "lifetime, food_eaten, computed_food_eaten, times_eating_for_nothing, "
                         "enemies_touched, computed_enemies_touched, times_attacking_for_nothing, "
-                        "tiles_covered, release_at_home_count) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        "tiles_covered, release_at_home_count, walk_in_home_direction, walk_in_opposite_direction) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         "ON CONFLICT(run_id, creature_uid) DO UPDATE SET "
                         "is_alive = excluded.is_alive, "
                         "fitness = excluded.fitness, "
@@ -230,7 +234,9 @@ class TrackingDB:
                         "computed_enemies_touched = excluded.computed_enemies_touched, "
                         "times_attacking_for_nothing = excluded.times_attacking_for_nothing, "
                         "tiles_covered = excluded.tiles_covered, "
-                        "release_at_home_count = excluded.release_at_home_count",
+                        "release_at_home_count = excluded.release_at_home_count, "
+                        "walk_in_home_direction = excluded.walk_in_home_direction, "
+                        "walk_in_opposite_direction = excluded.walk_in_opposite_direction",
                         cs_rows,
                     )
 

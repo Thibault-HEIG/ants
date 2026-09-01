@@ -62,7 +62,6 @@ class Simulation:
         self,
         rng: np.random.Generator | None = None,
         active_species: dict[type, dict] | list[type] | None = None,
-        load_path: str | None = None,
     ) -> None:
         self.rng: np.random.Generator = rng if rng is not None else np.random.default_rng(RANDOM_SEED)
         cfg = active_species if active_species is not None else ACTIVE_SPECIES
@@ -92,159 +91,10 @@ class Simulation:
             cls: getattr(cls, "initial_count", 10) for cls in self.active_species
         }
 
-        if load_path is not None:
-            self.load_from_save(load_path)
-
     def is_npc(self, cls: type) -> bool:
         """Return True if species cls is configured as an NPC (non-evolving)."""
         cfg = self.species_config.get(cls, {})
         return bool(cfg.get("npc", getattr(cls, "npc", False)))
-
-    def _build_constants_snapshot(self) -> dict:
-        """Collect all uppercase constants from core and species modules."""
-        import core.constants as const_mod
-        from species import ant_constants as ant_mod
-        from species import spider_constants as spider_mod
-
-        const_snap = {}
-        for mod in (const_mod, ant_mod, spider_mod):
-            for k in dir(mod):
-                if k.isupper() and not k.startswith("_"):
-                    val = getattr(mod, k)
-                    if isinstance(val, (int, float, str, bool)):
-                        const_snap[k] = val
-        return const_snap
-
-    def save_full_state(self, filename: str | None = None, notes: str = "", run_id: int | None = None) -> str | None:
-        """Save full simulation state to a JSON file in saves/ directory."""
-        import json
-        import os
-        from datetime import datetime
-
-        os.makedirs("saves", exist_ok=True)
-        if filename is None:
-            filename = datetime.now().strftime("%y-%m-%d-%H-%M")
-
-        filepath = os.path.join("saves", f"{filename}.json" if not filename.endswith(".json") else filename)
-
-        gen_counts = {}
-        for cls in self.active_species:
-            sp_name = getattr(cls, "species_name", cls.__name__)
-            gen_counts[sp_name] = self.world.generation_counts.get(cls, 0) if hasattr(self.world, "generation_counts") else 0
-
-        save_data = {
-            "notes": notes,
-            "timestamp": datetime.now().isoformat(),
-            "round_time": float(self.world.round_time),
-            "generation_counts": gen_counts,
-            "run_id": run_id,
-            "species": {},
-            "constants_snapshot": self._build_constants_snapshot(),
-        }
-
-        for cls in self.active_species:
-            species_name = getattr(cls, "species_name", cls.__name__)
-            living = self.world.creatures.get(cls, [])
-            genomes = [c.genome.tolist() for c in living]
-            cfg = self.species_config.get(cls, {})
-
-            save_data["species"][species_name] = {
-                "genomes": genomes,
-                "config": cfg
-            }
-
-        with open(filepath, "w") as f:
-            json.dump(save_data, f, indent=2)
-
-        print(f"[SAVE] Saved full state ({sum(len(s['genomes']) for s in save_data['species'].values())} genomes) to {filepath}")
-        return filepath
-
-    def load_from_save(self, filepath: str) -> dict | None:
-        """Load genomes and state from a JSON save file.
-
-        Expects the dict-based format produced by save_full_state().
-        Missing fields default to 0 or empty rather than raising.
-        If genome count < population target, fills with clones/mutated genomes.
-        """
-        import json
-        import os
-        from evolution.genetics import mutate
-        from core.constants import GENOME_SIZE
-
-        actual_path = filepath
-        if not os.path.exists(actual_path) and not actual_path.endswith(".json"):
-            actual_path += ".json"
-        if not os.path.exists(actual_path):
-            alt_path = actual_path.replace(".", "-") if "." in filepath else actual_path.replace("-", ".")
-            if not alt_path.endswith(".json"):
-                alt_path += ".json"
-            if os.path.exists(alt_path):
-                actual_path = alt_path
-
-        if not os.path.exists(actual_path):
-            print(f"[ERROR] Save file not found: {filepath}")
-            return
-
-        try:
-            with open(actual_path, "r") as f:
-                save_data = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            print(f"[ERROR] Failed to read save file {actual_path}: {exc}")
-            return
-
-        if not isinstance(save_data, dict):
-            print(f"[ERROR] Save file is not in the expected JSON dict format: {actual_path}")
-            return
-
-        print(f"[LOAD] Loading saved simulation from {actual_path}...")
-
-        species_map = {getattr(cls, "species_name", cls.__name__): cls for cls in self.active_species}
-        for cls in self.active_species:
-            species_map[cls.__name__] = cls
-
-        genomes_by_species: dict[type, list[np.ndarray]] = {cls: [] for cls in self.active_species}
-
-        # Parse genomes from "species" block
-        for sp_name, sp_data in save_data.get("species", {}).items():
-            if sp_name not in species_map:
-                continue
-            cls = species_map[sp_name]
-            for g in sp_data.get("genomes", []):
-                try:
-                    arr = np.array(g, dtype=float)
-                    if arr.shape == (GENOME_SIZE,):
-                        genomes_by_species[cls].append(arr)
-                except (ValueError, TypeError):
-                    continue
-
-        # Validate: at least one valid genome per active species
-        for cls in self.active_species:
-            sp_name = getattr(cls, "species_name", cls.__name__)
-            if len(genomes_by_species[cls]) == 0:
-                print(f"[ERROR] No valid genome found for {sp_name}")
-
-        # Fill genomes to match target population size via clones/mutation
-        for cls, genomes in genomes_by_species.items():
-            target = getattr(cls, "initial_count", 10)
-            if len(genomes) > 0 and len(genomes) < target:
-                original_count = len(genomes)
-                while len(genomes) < target:
-                    parent_idx = len(genomes) % original_count
-                    parent = genomes[parent_idx]
-                    genomes.append(mutate(parent, self.rng))
-
-        self.loaded_genomes = genomes_by_species
-        self.world.reset_with_genomes(genomes_by_species)
-
-        # Restore round_time and gen_count (when reload with code changes)
-        if save_data.get("notes") == "auto-reload":
-            self.world.round_time = float(save_data.get("round_time", 0.0))
-            for cls in self.active_species:
-                sp_name = getattr(cls, "species_name", cls.__name__)
-                self.world.generation_counts[cls] = save_data.get("generation_counts", {}).get(sp_name, 0)
-        
-        print("[LOAD] Successfully started simulation from saved state.")
-        return save_data.get("constants_snapshot", {})
 
     def load_from_db(self, tracking_db: Any, run_id: int, reset_stats: bool = False) -> None:
         """Load genomes and state from the SQLite tracking database."""
@@ -261,7 +111,8 @@ class Simulation:
             return
             
         snapshot_id, round_time = row
-        self.world.round_time = float(round_time)
+        saved_round_time = float(round_time)
+        saved_generation_counts = {}
         
         genomes_by_species = {cls: [] for cls in self.active_species}
         for cls in self.active_species:
@@ -289,12 +140,26 @@ class Simulation:
                     parent_idx = len(genomes) % original_count
                     parent = genomes[parent_idx]
                     genomes.append(mutate(parent, self.rng))
+            elif len(genomes) > target:
+                genomes_by_species[cls] = genomes[:target]
 
             # Estimate generation counts
-            self.world.generation_counts[cls] = int(self.world.round_time / GENERATION_DURATION) + 1
+            saved_generation_counts[cls] = int(saved_round_time / GENERATION_DURATION) + 1
 
         self.loaded_genomes = genomes_by_species
         self.world.reset_with_genomes(genomes_by_species)
+
+        # Restore timer and generations after reset (if not branching)
+        if not reset_stats:
+            self.world.round_time = saved_round_time
+            for cls in self.active_species:
+                self.world.generation_counts[cls] = saved_generation_counts[cls]
+                self.world.generation_timers[cls] = saved_round_time % GENERATION_DURATION
+        else:
+            # If branching, reset time and generations
+            for cls in self.active_species:
+                self.world.generation_counts[cls] = 0
+                self.world.generation_timers[cls] = 0.0
         
         if reset_stats:
             from core.utils import SpeciesStats

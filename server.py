@@ -28,7 +28,7 @@ logger = logging.getLogger("server")
 CLIENTS: set[websockets.WebSocketServerProtocol] = set()
 SIMULATION: Simulation | None = None
 IS_PAUSED: bool = False
-
+WAITING_FOR_STARTUP: bool = False
 
 TRACKING_DB: Any | None = None
 CURRENT_RUN_ID: int | None = None
@@ -157,7 +157,7 @@ def start_http_server(host: str, port: int) -> int:
 
 
 async def handle_client_message(websocket: websockets.WebSocketServerProtocol, raw_msg: str) -> None:
-    global IS_PAUSED, SIMULATION, CURRENT_RUN_ID
+    global IS_PAUSED, SIMULATION, CURRENT_RUN_ID, WAITING_FOR_STARTUP
     if SIMULATION is None:
         return
 
@@ -208,6 +208,14 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
 
 
 
+    elif msg_type == "start_new_run":
+        if WAITING_FOR_STARTUP:
+            CURRENT_RUN_ID = TRACKING_DB.start_run(notes="Standard run")
+            SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls)
+            WAITING_FOR_STARTUP = False
+            IS_PAUSED = False
+            await websocket.send(json.dumps({"type": "start_result", "ok": True}))
+
     elif msg_type == "load_from_db":
         run_id = data.get("run_id")
         reset_stats = data.get("reset_stats", False)
@@ -215,12 +223,20 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
             try:
                 SIMULATION.load_from_db(TRACKING_DB, run_id, reset_stats=reset_stats)
                 if reset_stats:
-                    TRACKING_DB.end_run(CURRENT_RUN_ID)
+                    if CURRENT_RUN_ID is not None:
+                        TRACKING_DB.end_run(CURRENT_RUN_ID)
                     CURRENT_RUN_ID = TRACKING_DB.start_run(notes=f"Branched from run {run_id}")
                 else:
+                    if CURRENT_RUN_ID is not None and CURRENT_RUN_ID != run_id:
+                        TRACKING_DB.end_run(CURRENT_RUN_ID)
                     CURRENT_RUN_ID = run_id
                     
                 SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls)
+                
+                if WAITING_FOR_STARTUP:
+                    WAITING_FOR_STARTUP = False
+                    IS_PAUSED = False
+
                 await websocket.send(json.dumps({"type": "load_result", "ok": True, "message": f"Loaded DB run {run_id}"}))
             except Exception as exc:
                 logger.error(f"DB Load failed: {exc}")
@@ -229,18 +245,20 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
     elif msg_type == "reload_with_changes":
         import sys, os
         try:
-            save_path = os.path.join("saves", "_reload_state.json")
-            SIMULATION.save_full_state(filename="_reload_state", notes="auto-reload", run_id=CURRENT_RUN_ID)
+            # Force write snapshot before reload
+            if CURRENT_RUN_ID is not None:
+                TRACKING_DB.write_snapshot(SIMULATION.world, SIMULATION, CURRENT_RUN_ID)
+                TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, SIMULATION.active_species[0])
+                if len(SIMULATION.active_species) > 1:
+                    TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, SIMULATION.active_species[1])
 
             await websocket.send(json.dumps({
                 "type": "reload_starting",
                 "ok": True,
-                "message": "Restarting server with code changes...",
-                "save_path": save_path,
+                "message": "Restarting server with code changes..."
             }))
             await asyncio.sleep(0.2)
 
-            # Strip existing --load/--path/-p args to avoid duplication on repeated reloads
             clean_argv = []
             skip_next = False
             for arg in sys.argv:
@@ -254,7 +272,11 @@ async def handle_client_message(websocket: websockets.WebSocketServerProtocol, r
                     continue
                 clean_argv.append(arg)
 
-            os.execv(sys.executable, [sys.executable] + clean_argv + ["--load", save_path])
+            load_arg = f"{CURRENT_RUN_ID}_reload" if CURRENT_RUN_ID is not None else ""
+            if load_arg:
+                os.execv(sys.executable, [sys.executable] + clean_argv + ["--load", load_arg])
+            else:
+                os.execv(sys.executable, [sys.executable] + clean_argv)
         except Exception as exc:
             logger.error(f"Reload failed: {exc}")
             await websocket.send(json.dumps({
@@ -272,6 +294,10 @@ async def ws_handler(websocket: websockets.WebSocketServerProtocol, path: str = 
     if SIMULATION is not None:
         SIMULATION._last_sent_training_idx = 0
         SIMULATION._training_reset_flag = True
+
+    global WAITING_FOR_STARTUP
+    if WAITING_FOR_STARTUP:
+        await websocket.send(json.dumps({"type": "request_startup_choice"}))
 
     # Push pending reload result to the reconnecting client
     if RELOAD_RESULT is not None:
@@ -401,24 +427,25 @@ RELOAD_RESULT: dict | None = None
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = None) -> None:
-    global SIMULATION, RELOAD_RESULT, TRACKING_DB, CURRENT_RUN_ID
+    global SIMULATION, RELOAD_RESULT, TRACKING_DB, CURRENT_RUN_ID, WAITING_FOR_STARTUP, IS_PAUSED
     import os
     from core.tracking_db import TrackingDB
 
-    is_reload = (load_path is not None and load_path.endswith("_reload_state.json"))
-    old_constants_snapshot = None
+    is_reload = False
     old_run_id = None
     
-    if is_reload and os.path.exists(load_path):
-        # Read the saved constants snapshot before we load (and potentially overwrite)
-        try:
-            with open(load_path, "r") as f:
-                import json as _json
-                saved = _json.load(f)
-                old_constants_snapshot = saved.get("constants_snapshot", {})
-                old_run_id = saved.get("run_id")
-        except Exception:
-            pass
+    if load_path:
+        if load_path.endswith("_reload"):
+            is_reload = True
+            try:
+                old_run_id = int(load_path.replace("_reload", ""))
+            except ValueError:
+                pass
+        else:
+            try:
+                old_run_id = int(load_path)
+            except ValueError:
+                pass
 
     TRACKING_DB = TrackingDB()
     if is_reload and old_run_id is not None:
@@ -426,41 +453,28 @@ def run_server(host: str = "0.0.0.0", port: int = 8765, load_path: str | None = 
         # We tell the TrackingDB that the next snapshot for this run_id 
         # should carry the recent_code_changes flag.
         TRACKING_DB.flag_next_snapshot_for_code_change(CURRENT_RUN_ID)
+        WAITING_FOR_STARTUP = False
+    elif load_path and old_run_id is not None:
+        CURRENT_RUN_ID = old_run_id
+        TRACKING_DB.restore_species_stats(CURRENT_RUN_ID)
+        WAITING_FOR_STARTUP = False
     else:
-        CURRENT_RUN_ID = TRACKING_DB.start_run(notes="Standard run")
+        CURRENT_RUN_ID = None
+        WAITING_FOR_STARTUP = True
+        IS_PAUSED = True
 
-    SIMULATION = Simulation(load_path=load_path)
+    # Do NOT load from JSON file via Simulation constructor, since JSON save/load is gone
+    SIMULATION = Simulation()
+    if old_run_id is not None:
+        SIMULATION.load_from_db(TRACKING_DB, old_run_id, reset_stats=False)
 
-    if is_reload and old_constants_snapshot is not None:
-        # Compare old (saved) constants against current (freshly-imported) constants
-        current_constants = SIMULATION._build_constants_snapshot()
-        changed = []
-        for k, old_val in old_constants_snapshot.items():
-            new_val = current_constants.get(k)
-            if new_val is not None and new_val != old_val:
-                changed.append(k)
-        # Check for newly added constants
-        for k in current_constants:
-            if k not in old_constants_snapshot:
-                changed.append(k)
-
-        if changed:
-            RELOAD_RESULT = {
-                "type": "reload_result", "ok": True,
-                "message": f"Successfully updated the constants {', '.join(changed)}",
-            }
-        else:
-            RELOAD_RESULT = {
-                "type": "reload_result", "ok": True,
-                "message": "Server restarted — no constant changes detected",
-            }
-        # Clean up the temp reload save
-        try:
-            os.unlink(load_path)
-        except OSError:
-            pass
+    if is_reload:
+        RELOAD_RESULT = {
+            "type": "reload_result", "ok": True,
+            "message": "Server restarted with code changes",
+        }
             
-    SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls)
+    SIMULATION.world.on_generation_end = lambda cls: TRACKING_DB.write_genomes(SIMULATION.world, CURRENT_RUN_ID, cls) if CURRENT_RUN_ID is not None else None
 
     http_port = start_http_server(host, port)
     logger.info(f"WebSocket Server starting at ws://{host}:{port}")
