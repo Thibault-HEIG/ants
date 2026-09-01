@@ -264,6 +264,7 @@ ants-world/
 ├── core/
 │   ├── engine.py            # CLI argument parsing, launches server
 │   ├── simulation.py        # Top-level orchestrator, save/load, speed control
+│   ├── tracking_db.py       # SQLite WAL database for metrics and checkpoints
 │   ├── serialization.py     # Snapshot builder (full & aggregate) for WebSocket
 │   ├── constants.py         # Global constants & SPECIES_CONFIG
 │   └── utils.py             # Math helpers & SpeciesStats tracker
@@ -302,17 +303,18 @@ ants-world/
 
 ```
 core.engine (CLI) → server.py
- ├── simulation_loop()          Async loop: physics steps at real-time speed
- ├── broadcast_loop()           Async loop: serializes snapshots → WebSocket
+ ├── simulation_loop()          Async loop: physics steps, writes SQLite metrics every 2s
+ ├── broadcast_loop()           Async loop: serializes render snapshots → WebSocket
  ├── ws_handler()               Bidirectional: pause, speed, save, load, reload
- └── HTTP static server          Serves web/ and assets/ on port+1
+ └── HTTP static server          Serves web/, assets/ and /api/ endpoints on port+1
 
 Browser (web/)
- ├── controls.js                WebSocket client, charts (Chart.js), UI
+ ├── controls.js                WebSocket client (render stream), HTTP fetch (metrics API), UI
  └── renderer.js                Canvas 2D rendering from snapshot data
 ```
 
 ### Key Design Decisions
+- **Decoupled Rendering and Tracking**: Fast, ephemeral rendering data (positions, actions) is streamed via WebSockets. Occasional, authoritative tracking data (metrics, bounds, checkpoints) is written to a SQLite WAL database and queried via HTTP API.
 - **Headless simulation**: The Python process runs no GUI. All rendering happens in the browser via Canvas 2D, driven by JSON snapshots over WebSocket.
 - **Hot reload**: The web UI can trigger `reload_with_changes` which saves state, re-executes the Python process with updated code, and restores the simulation seamlessly.
 - **`Creature` & `Entity` abstractions**: Active agents inherit from `Creature`, passive objects from `Entity`. The update loop never branches on species name.
@@ -327,5 +329,6 @@ Browser (web/)
 |---------|---------|---------|
 | `numpy` | ≥1.20 | Neural network math, vector operations |
 | `websockets` | ≥10.0 | Async WebSocket server for client communication |
+| `sqlite3` | stdlib | Persistent tracking database and genome checkpoints |
 
 The web frontend uses vanilla HTML/JS/CSS with Chart.js loaded from CDN. No build step, no ML frameworks.

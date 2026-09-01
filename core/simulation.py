@@ -92,18 +92,6 @@ class Simulation:
             cls: getattr(cls, "initial_count", 10) for cls in self.active_species
         }
 
-        # Track average fitness curves over simulation time
-        self.history_time: list[float] = []
-        self.history_fitness: dict[str, list[float]] = {
-            getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species
-        }
-        # Per-ability best+avg training signal history (same cadence as history_fitness)
-        self.history_training: dict[str, dict[str, list[float]]] = self._make_empty_training_history()
-        self._plot_timer: float = 0.0
-        self._last_sent_training_idx: int = 0
-        self._training_reset_flag: bool = True  # Send full history on first broadcast
-        self._record_fitness_stat()
-
         if load_path is not None:
             self.load_from_save(load_path)
 
@@ -111,21 +99,6 @@ class Simulation:
         """Return True if species cls is configured as an NPC (non-evolving)."""
         cfg = self.species_config.get(cls, {})
         return bool(cfg.get("npc", getattr(cls, "npc", False)))
-
-    def _make_empty_training_history(self) -> dict[str, dict[str, list[float]]]:
-        """Build a fresh per-ability training history dict for all active species."""
-        result: dict[str, dict[str, list[float]]] = {}
-        for cls in self.active_species:
-            name = getattr(cls, "species_name", cls.__name__)
-            metrics = TRAINING_METRICS.get(name, [])
-            series: dict[str, list[float]] = {}
-            for m in metrics:
-                series[f"{m}_best"] = []
-                series[f"{m}_avg"] = []
-                series[f"{m}_best_lifetime"] = []
-                series[f"{m}_avg_lifetime"] = []
-            result[name] = series
-        return result
 
     def _build_constants_snapshot(self) -> dict:
         """Collect all uppercase constants from core and species modules."""
@@ -142,27 +115,7 @@ class Simulation:
                         const_snap[k] = val
         return const_snap
 
-    def _build_stats_snapshot(self) -> dict:
-        """Collect all SpeciesStats accumulator fields for serialization."""
-        from core.utils import SpeciesStats
-        return {
-            "total_dead_count": dict(SpeciesStats.total_dead_count),
-            "sum_dead_fitness": dict(SpeciesStats.sum_dead_fitness),
-            "sum_dead_food": dict(SpeciesStats.sum_dead_food),
-            "sum_dead_computed_food": dict(SpeciesStats.sum_dead_computed_food),
-            "sum_dead_enemies": dict(SpeciesStats.sum_dead_enemies),
-            "sum_dead_computed_enemies": dict(SpeciesStats.sum_dead_computed_enemies),
-            "sum_dead_lifetime": dict(SpeciesStats.sum_dead_lifetime),
-            "max_fitness": dict(SpeciesStats.max_fitness),
-            "max_foodeaten": dict(SpeciesStats.max_foodeaten),
-            "max_enemies_touched": dict(SpeciesStats.max_enemies_touched),
-            "max_computed_food": dict(SpeciesStats.max_computed_food),
-            "max_computed_enemies": dict(SpeciesStats.max_computed_enemies),
-            "max_lifetime": dict(SpeciesStats.max_lifetime),
-            "max_metrics": {k: dict(v) for k, v in SpeciesStats.max_metrics.items()},
-        }
-
-    def save_full_state(self, filename: str | None = None, notes: str = "") -> str | None:
+    def save_full_state(self, filename: str | None = None, notes: str = "", run_id: int | None = None) -> str | None:
         """Save full simulation state to a JSON file in saves/ directory."""
         import json
         import os
@@ -184,14 +137,9 @@ class Simulation:
             "timestamp": datetime.now().isoformat(),
             "round_time": float(self.world.round_time),
             "generation_counts": gen_counts,
+            "run_id": run_id,
             "species": {},
-            "history": {
-                "time": list(self.history_time),
-                "fitness": dict(self.history_fitness),
-                "training": {k: dict(v) for k, v in self.history_training.items()}
-            },
             "constants_snapshot": self._build_constants_snapshot(),
-            "stats": self._build_stats_snapshot(),
         }
 
         for cls in self.active_species:
@@ -221,7 +169,6 @@ class Simulation:
         import json
         import os
         from evolution.genetics import mutate
-        from core.utils import SpeciesStats
         from core.constants import GENOME_SIZE
 
         actual_path = filepath
@@ -276,31 +223,6 @@ class Simulation:
             if len(genomes_by_species[cls]) == 0:
                 print(f"[ERROR] No valid genome found for {sp_name}")
 
-        # Restore history (default to empty)
-        hist = save_data.get("history", {})
-        self.history_time = hist.get("time", [])
-        self.history_fitness = hist.get("fitness",
-            {getattr(cls, "species_name", cls.__name__): [] for cls in self.active_species})
-        self.history_training = hist.get("training",
-            self._make_empty_training_history())
-
-        # Restore stats — every field defaults to empty dict when absent
-        stats = save_data.get("stats", {})
-        SpeciesStats.total_dead_count = stats.get("total_dead_count", {})
-        SpeciesStats.sum_dead_fitness = stats.get("sum_dead_fitness", {})
-        SpeciesStats.sum_dead_food = stats.get("sum_dead_food", {})
-        SpeciesStats.sum_dead_computed_food = stats.get("sum_dead_computed_food", {})
-        SpeciesStats.sum_dead_enemies = stats.get("sum_dead_enemies", {})
-        SpeciesStats.sum_dead_computed_enemies = stats.get("sum_dead_computed_enemies", {})
-        SpeciesStats.sum_dead_lifetime = stats.get("sum_dead_lifetime", {})
-        SpeciesStats.max_fitness = stats.get("max_fitness", {})
-        SpeciesStats.max_foodeaten = stats.get("max_foodeaten", {})
-        SpeciesStats.max_enemies_touched = stats.get("max_enemies_touched", {})
-        SpeciesStats.max_computed_food = stats.get("max_computed_food", {})
-        SpeciesStats.max_computed_enemies = stats.get("max_computed_enemies", {})
-        SpeciesStats.max_lifetime = stats.get("max_lifetime", {})
-        SpeciesStats.max_metrics = stats.get("max_metrics", {})
-
         # Fill genomes to match target population size via clones/mutation
         for cls, genomes in genomes_by_species.items():
             target = getattr(cls, "initial_count", 10)
@@ -316,31 +238,75 @@ class Simulation:
 
         # Restore round_time and gen_count (when reload with code changes)
         if save_data.get("notes") == "auto-reload":
-            self.world.round_time = float(save_data["round_time"])
+            self.world.round_time = float(save_data.get("round_time", 0.0))
             for cls in self.active_species:
                 sp_name = getattr(cls, "species_name", cls.__name__)
-                self.world.generation_counts[cls] = save_data["generation_counts"].get(sp_name, 0)
-
+                self.world.generation_counts[cls] = save_data.get("generation_counts", {}).get(sp_name, 0)
+        
         print("[LOAD] Successfully started simulation from saved state.")
-        self._last_sent_training_idx = 0
-        self._training_reset_flag = True
         return save_data.get("constants_snapshot", {})
 
+    def load_from_db(self, tracking_db: Any, run_id: int, reset_stats: bool = False) -> None:
+        """Load genomes and state from the SQLite tracking database."""
+        from evolution.genetics import mutate
+        from core.constants import GENERATION_DURATION
 
+        cursor = tracking_db.conn.cursor()
+        
+        # Get the most recent snapshot for this run
+        cursor.execute("SELECT id, time FROM snapshots WHERE run_id = ? ORDER BY time DESC LIMIT 1", (run_id,))
+        row = cursor.fetchone()
+        if not row:
+            print(f"[ERROR] No snapshots found for run {run_id}")
+            return
+            
+        snapshot_id, round_time = row
+        self.world.round_time = float(round_time)
+        
+        genomes_by_species = {cls: [] for cls in self.active_species}
+        for cls in self.active_species:
+            sp_name = getattr(cls, "species_name", cls.__name__)
+            cursor.execute(
+                "SELECT brain FROM genomes WHERE run_id = ? AND species_name = ? "
+                "AND generation = (SELECT MAX(generation) FROM genomes WHERE run_id = ? AND species_name = ?) "
+                "ORDER BY rank ASC", 
+                (run_id, sp_name, run_id, sp_name)
+            )
+            for g_row in cursor.fetchall():
+                try:
+                    # Stored with tobytes() -> load with frombuffer()
+                    arr = np.frombuffer(g_row[0], dtype=float)
+                    genomes_by_species[cls].append(arr)
+                except Exception:
+                    pass
+            
+            # Fill genomes to match target population size via clones/mutation
+            target = getattr(cls, "initial_count", 10)
+            genomes = genomes_by_species[cls]
+            if len(genomes) > 0 and len(genomes) < target:
+                original_count = len(genomes)
+                while len(genomes) < target:
+                    parent_idx = len(genomes) % original_count
+                    parent = genomes[parent_idx]
+                    genomes.append(mutate(parent, self.rng))
+
+            # Estimate generation counts
+            self.world.generation_counts[cls] = int(self.world.round_time / GENERATION_DURATION) + 1
+
+        self.loaded_genomes = genomes_by_species
+        self.world.reset_with_genomes(genomes_by_species)
+        
+        if reset_stats:
+            from core.utils import SpeciesStats
+            SpeciesStats.reset()
+        else:
+            tracking_db.restore_species_stats(run_id)
+
+        print(f"[LOAD] Successfully loaded run {run_id} from tracking DB.")
 
     def reset(self) -> None:
         """Reset simulation world to initial state or loaded save."""
         self.world.reset_with_genomes(self.loaded_genomes or {})
-        self.history_time.clear()
-        for series in self.history_fitness.values():
-            series.clear()
-        for species_series in self.history_training.values():
-            for series in species_series.values():
-                series.clear()
-        self._plot_timer = 0.0
-        self._last_sent_training_idx = 0
-        self._training_reset_flag = True
-        self._record_fitness_stat()
 
     @property
     def target_multiplier(self) -> float:
@@ -369,11 +335,6 @@ class Simulation:
             if current_total > self.total_spawned.get(cls, 0):
                 self.total_spawned[cls] = current_total
 
-        self._plot_timer += dt
-        if self._plot_timer >= 1.0:
-            self._plot_timer -= 1.0
-            self._record_fitness_stat()
-
     def get_total_spawned(self, cls: type) -> int:
         """Return historical peak population for a given species class."""
         if cls in self.total_spawned:
@@ -399,134 +360,3 @@ class Simulation:
     @total_spiders_spawned.setter
     def total_spiders_spawned(self, value: int) -> None:
         self.total_spawned[Spider] = value
-
-    def _record_fitness_stat(self) -> None:
-        """Record current average fitness and per-ability training metrics for each active species."""
-        self.history_time.append(round(self.world.round_time, 1))
-        for cls in self.active_species:
-            name = getattr(cls, "species_name", cls.__name__)
-            living = self.world.creatures.get(cls, [])
-            if living:
-                avg_fit = sum(c.compute_fitness() for c in living) / len(living)
-            else:
-                avg_fit = 0.0
-            if name not in self.history_fitness:
-                self.history_fitness[name] = []
-            self.history_fitness[name].append(round(avg_fit, 2))
-
-            # Per-ability training metrics: best + avg over living population
-            # Also record per-metric lifetime pairs for frontend normalization.
-            training = self.history_training.get(name, {})
-            for metric in TRAINING_METRICS.get(name, []):
-                if living:
-                    best_creature = max(living, key=lambda c: float(getattr(c, metric, 0.0)))
-                    best_val = float(getattr(best_creature, metric, 0.0))
-                    best_lifetime = float(getattr(best_creature, "survival_time", 0.0))
-                    avg_val = sum(float(getattr(c, metric, 0.0)) for c in living) / len(living)
-                    avg_lifetime = sum(float(getattr(c, "survival_time", 0.0)) for c in living) / len(living)
-                else:
-                    best_val = 0.0
-                    best_lifetime = 0.0
-                    avg_val = 0.0
-                    avg_lifetime = 0.0
-                best_key = f"{metric}_best"
-                avg_key = f"{metric}_avg"
-                best_lt_key = f"{metric}_best_lifetime"
-                avg_lt_key = f"{metric}_avg_lifetime"
-                if best_key not in training:
-                    training[best_key] = []
-                if avg_key not in training:
-                    training[avg_key] = []
-                if best_lt_key not in training:
-                    training[best_lt_key] = []
-                if avg_lt_key not in training:
-                    training[avg_lt_key] = []
-                training[best_key].append(round(best_val, 2))
-                training[avg_key].append(round(avg_val, 2))
-                training[best_lt_key].append(round(best_lifetime, 2))
-                training[avg_lt_key].append(round(avg_lifetime, 2))
-
-    def plot_fitness_curves(self) -> None:
-        """Draw historical average fitness curves for all species in the terminal using plotext."""
-        can_plot = True
-        try:
-            import plotext as plt
-        except ImportError:
-            print("[WARN] plotext library not installed. Cannot display terminal plots.")
-            can_plot = False
-
-        if can_plot and (not self.history_time or len(self.history_time) < 2):
-            print("[INFO] Not enough simulation history recorded to plot fitness curves.")
-            can_plot = False
-
-        if can_plot:
-            plt.clear_figure()
-            plt.title("Ants vs Spiders — Evolutionary Fitness Curves")
-            plt.xlabel("Simulation Time (seconds)")
-            plt.ylabel("Average Fitness Score")
-
-            colors = {"Ant": "green", "Spider": "red"}
-            for name, fitness_series in self.history_fitness.items():
-                color = colors.get(name, "blue")
-                plt.plot(self.history_time, fitness_series, label=f"{name} Avg Fitness", color=color)
-
-            plt.plotsize(100, 25)
-            print("\n" + "=" * 80)
-            print(" " * 25 + "SIMULATION FITNESS CURVES")
-            print("=" * 80)
-            plt.show()
-            print("=" * 80)
-
-        self._print_metric_recap()
-
-    def _print_metric_recap(self) -> None:
-        """Print end-of-simulation metric recap for each active species."""
-        from species.ant_constants import ANT_METRIC_BOUNDS
-        from species.spider_constants import SPIDER_METRIC_BOUNDS
-        from core.utils import SpeciesStats
-
-        print("\n" + "=" * 80)
-        print(" " * 26 + "SIMULATION METRIC RECAP")
-        print("=" * 80)
-
-        for cls in self.active_species:
-            species_name = getattr(cls, "species_name", cls.__name__)
-            bounds_table = getattr(cls, "metrics", {})
-            if not bounds_table:
-                if species_name == "Ant":
-                    bounds_table = ANT_METRIC_BOUNDS
-                elif species_name == "Spider":
-                    bounds_table = SPIDER_METRIC_BOUNDS
-
-            recap_metrics = list(bounds_table.keys()) if bounds_table else [
-                "survival_time",
-                "computed_food_eaten",
-                "computed_enemies_touched",
-                "times_eating_for_nothing",
-                "times_attacking_for_nothing",
-                "tiles_covered",
-            ]
-
-            peak_table = SpeciesStats.max_metrics.get(species_name, {})
-            all_creatures = self.world.creatures.get(cls, []) + self.world.dead_creatures.get(cls, [])
-
-            print(f"\n--- {species_name} Metric Recap ---")
-            print(f"  {'Metric':<45} | {'Max Value':>10} | {'Bound':>10} | Status")
-            print("  " + "-" * 78)
-            for metric_name in recap_metrics:
-                peak_val = peak_table.get(metric_name, 0.0)
-                curr_max = max((float(getattr(c, metric_name, 0.0)) for c in all_creatures), default=0.0)
-                val = max(peak_val, curr_max)
-                bound_val = float(bounds_table.get(metric_name, 0.0))
-
-                if metric_name == "survival_time" or val % 1 != 0:
-                    val_str = f"{val:.1f}"
-                else:
-                    val_str = f"{int(val)}"
-
-                bound_str = f"{bound_val:.0f}" if bound_val % 1 == 0 else f"{bound_val:.1f}"
-                warning = "⚠️" if val > bound_val else ""
-
-                print(f"  {metric_name:<45} | {val_str:>10} | {bound_str:>10} | {warning}")
-
-        print("\n" + "=" * 80 + "\n")

@@ -36,5 +36,7 @@ core/constants.py
 species/ant_constants.py
 species/spider_constants.py
 
-# Saves
+# Saves & Database
 saves/
+data/tracking.*
+scripts/test.sql

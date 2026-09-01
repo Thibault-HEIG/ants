@@ -50,9 +50,9 @@
 
           <button class="btn" id="btnControls">⌨ Controls</button>
 
-          <input type="file" id="fileLoad" accept=".json" style="display:none;">
-          <button class="btn" id="btnLoad">📂 Load</button>
-          <button class="btn" id="btnSave">💾 Save</button>
+
+          <button class="btn" id="btnLoadDB">🗄 Load DB</button>
+          <button class="btn" id="btnDeleteRun">🗑️ Delete Run</button>
         </div>
       </header>
 
@@ -181,8 +181,8 @@
         
         <div id="chartModeToggleContainer" style="display: flex; justify-content: center; gap: 10px; padding: 10px 0;">
           <span style="color: #9b8b7a; align-self: center; font-size: 12px; font-weight: bold;">CHART MODE:</span>
-          <button id="btnContinuous" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: #c4a35a; color: #1a1a1a; font-weight: bold;">Continuous</button>
-          <button id="btnGenerational" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: transparent; color: #9b8b7a; font-weight: bold;">Generational</button>
+          <button id="btnRaw" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: #c4a35a; color: #1a1a1a; font-weight: bold;">Raw</button>
+          <button id="btnSoft" style="min-width: 0; padding: 5px 15px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; background: transparent; color: #9b8b7a; font-weight: bold;">Soft</button>
         </div>
 
         <div class="tab-content active" id="tab-live-analytics">
@@ -192,6 +192,14 @@
             </div>
             <div class="chart-container populationChart">
               <canvas id="populationChart"></canvas>
+            </div>
+          </div>
+          <div class="charts" style="margin-top: 1rem;">
+            <div class="chart-container fitnessChartLinear">
+              <canvas id="fitnessChartLinear"></canvas>
+            </div>
+            <div class="chart-container populationChartLinear">
+              <canvas id="populationChartLinear"></canvas>
             </div>
           </div>
 
@@ -327,17 +335,22 @@
       </div>
     </div>
 
-    <div id="saveModal" class="modal-overlay">
+
+
+    <div id="loadDbModal" class="modal-overlay">
       <div class="modal">
-        <div class="modal-title">Save Simulation State</div>
+        <div class="modal-title">Load Run from DB</div>
         <div class="modal-body">
-          <input type="text" id="saveFilename" class="input-field" placeholder="Filename (e.g. 24-10-15-12-00)">
-          <textarea id="saveNotes" class="input-field" placeholder="Add notes about this save..."></textarea>
+          <select id="loadDbRunId" class="input-field"></select>
+          <div style="margin-top: 10px;">
+            <input type="checkbox" id="loadDbResetStats">
+            <label for="loadDbResetStats" style="font-size: 0.9rem;">Reset stats (Branch to new run)</label>
+          </div>
         </div>
         <div class="modal-actions">
-          <button class="btn" id="btnCancelSave">Cancel</button>
-          <button class="btn" id="btnConfirmSave"
-            style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Save</button>
+          <button class="btn" id="btnCancelLoadDb">Cancel</button>
+          <button class="btn" id="btnConfirmLoadDb"
+            style="background:var(--accent-teal);color:white;border-color:var(--accent-teal);">Load</button>
         </div>
       </div>
     </div>

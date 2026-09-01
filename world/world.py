@@ -32,6 +32,7 @@ from core.utils import SpeciesStats
 from evolution.genetics import mutate, select_parents
 from species.ant import Ant
 from species.ant_constants import ANT_SPAWN_NB_AT_DELIVERY
+from species.creature import reset_creature_uid_counter
 from species.spider import Spider
 from world.food import Food, FoodSource
 from world.kingdom import Kingdom
@@ -58,6 +59,7 @@ class World:
         active_species: dict[type, dict] | list[type] | None = None,
     ) -> None:
         SpeciesStats.reset()
+        reset_creature_uid_counter()
         self.width: int = WORLD_WIDTH
         self.height: int = WORLD_HEIGHT
         self.rng: np.random.Generator = rng
@@ -98,6 +100,9 @@ class World:
         self.round_time: float = 0.0
         self.mean_genomes: dict[type, np.ndarray | None] = {}
         self._last_mean_genome_time: float = -999.0
+
+        # Callback for external systems (e.g. tracking DB genome checkpoints)
+        self.on_generation_end: Any | None = None
 
         # Phase 2: Kingdoms
         self.kingdoms: dict[type, Kingdom] = {
@@ -349,6 +354,14 @@ class World:
         else:
             self.repro_timers[cls] = 0.0
 
+        # Advance generation timer to trigger periodic genome checkpoints for continuous species
+        self.generation_timers[cls] += dt
+        if self.generation_timers[cls] >= GENERATION_DURATION:
+            self.generation_timers[cls] -= GENERATION_DURATION
+            self.generation_counts[cls] += 1
+            if self.on_generation_end is not None:
+                self.on_generation_end(cls)
+
     # ------------------------------------------------------------------
     # Generational reproduction (elitism + fixed-time episodes)
     # ------------------------------------------------------------------
@@ -427,6 +440,9 @@ class World:
         self.food_items = []
         self.environment.food_sources.clear()
         self.environment.source_cooldown = 0.0
+
+        if self.on_generation_end is not None:
+            self.on_generation_end(cls)
 
     def _select_parent(self, creatures: list[Any], cls: type | None = None) -> Any:
         """Select a parent alternating 1/2 best individual, 1/2 random from top 20% best parents."""
