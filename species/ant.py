@@ -235,5 +235,19 @@ class Ant(Creature):
         # Total fitness
         total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_home + walk_opposite + release_anywhere + release_at_home + pheromone_placement)
         
-        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        sum_weights = (
+            abs(FITNESS_FOOD_WEIGHT) + abs(FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT) +
+            abs(FITNESS_ENEMIES_TOUCHED_WEIGHT) + abs(FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT) +
+            abs(FITNESS_SURVIVAL_WEIGHT) + abs(FITNESS_FOLLOW_PHEROMONES_WEIGHT) +
+            abs(FITNESS_TILES_COVERED_WEIGHT) + abs(FITNESS_TAKEN_OBJECT_WEIGHT) +
+            abs(FITNESS_WALK_HOME_DIRECTION_WEIGHT) + abs(FITNESS_WALK_OPPOSITE_HOME_WEIGHT) +
+            abs(FITNESS_RELEASE_ANYWHERE_WEIGHT) + abs(FITNESS_RELEASE_AT_HOME_WEIGHT) +
+            abs(FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT)
+        )
+        if sum_weights != 0:
+            total = (total / sum_weights) * 100.0
+        else:
+            total = 0.0
+        
+        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * 100.0 * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
         return self._store_cached_fitness(result)

@@ -119,5 +119,15 @@ class Spider(Creature):
         # Total fitness
         total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + survival_time + tiles_covered)
         
-        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
+        sum_weights = (
+            abs(FITNESS_FOOD_WEIGHT) + abs(FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT) +
+            abs(FITNESS_ENEMIES_TOUCHED_WEIGHT) + abs(FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT) +
+            abs(FITNESS_SURVIVAL_WEIGHT) + abs(FITNESS_TILES_COVERED_WEIGHT)
+        )
+        if sum_weights != 0:
+            total = (total / sum_weights) * 100.0
+        else:
+            total = 0.0
+        
+        result = total * (1 - FITNESS_BRAIN_ORIGINALITY_WEIGHT) + (self.brain_originality * 100.0 * FITNESS_BRAIN_ORIGINALITY_WEIGHT)
         return self._store_cached_fitness(result)
