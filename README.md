@@ -170,7 +170,7 @@ Attack > Eat > Take > Release
   - The creature is physically carrying an object (`carried_object`).
   - **Restrictions**: It cannot `attack`, `eat`, or `take` another item (`take_signal = False`, `is_attacking = False`, `is_eating = False`).
   - **Movement Penalty**: Carrying an object reduces effective movement speed by 20% (`CARRY_SPEED_MULTIPLIER = 0.8`).
-  - **Navigation & Tracking**: Every step taken toward the home kingdom while carrying an object contributes to `walk_with_object_in_home_direction`, whereas moving away increments `walk_with_object_in_opposite_home_direction`. This enables precise fitness shaping for foraging and resource retrieval.
+  - **Navigation & Tracking**: The quality of the ant's heading toward the home kingdom while carrying an object is continually evaluated and tracked in `walking_carrying`. This enables precise fitness shaping for foraging and resource retrieval.
 
 - **Taking (`take > 0.5`)**:
   - If the creature is not carrying an object and is within pickup range (`EAT_PICKUP_RADIUS = 20.0`) of an unconsumed, uncarried food item, it picks up the item and enters the carrying state.

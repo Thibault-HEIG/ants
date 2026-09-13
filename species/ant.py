@@ -45,8 +45,7 @@ from species.ant_constants import (
     FITNESS_TILES_COVERED_WEIGHT,
     FITNESS_BRAIN_ORIGINALITY_WEIGHT,
     FITNESS_TAKEN_OBJECT_WEIGHT,
-    FITNESS_WALK_HOME_DIRECTION_WEIGHT,
-    FITNESS_WALK_OPPOSITE_HOME_WEIGHT,
+    FITNESS_WALKING_CARRYING_WEIGHT,
     FITNESS_RELEASE_ANYWHERE_WEIGHT,
     FITNESS_RELEASE_AT_HOME_WEIGHT,
     FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT,
@@ -224,8 +223,8 @@ class Ant(Creature):
 
         # Carry-object
         taken_object = self.normalize_metric("computed_taken_object") * FITNESS_TAKEN_OBJECT_WEIGHT
-        walk_home = self.normalize_metric("walk_with_object_in_home_direction") * FITNESS_WALK_HOME_DIRECTION_WEIGHT
-        walk_opposite = self.normalize_metric("walk_with_object_in_opposite_home_direction") * FITNESS_WALK_OPPOSITE_HOME_WEIGHT
+        # walking_carrying is already in [-1, 1], so we don't normalize it, just scale by weight
+        walk_carry = self.walking_carrying * FITNESS_WALKING_CARRYING_WEIGHT
         release_anywhere = self.normalize_metric("computed_release_anywhere") * FITNESS_RELEASE_ANYWHERE_WEIGHT
         release_at_home = self.normalize_metric("release_at_home_count") * FITNESS_RELEASE_AT_HOME_WEIGHT
 
@@ -233,14 +232,14 @@ class Ant(Creature):
         pheromone_placement = self.normalize_metric("released_pheromone_around_food_source") * FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT
         
         # Total fitness
-        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_home + walk_opposite + release_anywhere + release_at_home + pheromone_placement)
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_carry + release_anywhere + release_at_home + pheromone_placement)
         
         sum_weights = (
             abs(FITNESS_FOOD_WEIGHT) + abs(FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT) +
             abs(FITNESS_ENEMIES_TOUCHED_WEIGHT) + abs(FITNESS_TIMES_ATTACKING_FOR_NOTHING_WEIGHT) +
             abs(FITNESS_SURVIVAL_WEIGHT) + abs(FITNESS_FOLLOW_PHEROMONES_WEIGHT) +
             abs(FITNESS_TILES_COVERED_WEIGHT) + abs(FITNESS_TAKEN_OBJECT_WEIGHT) +
-            abs(FITNESS_WALK_HOME_DIRECTION_WEIGHT) + abs(FITNESS_WALK_OPPOSITE_HOME_WEIGHT) +
+            abs(FITNESS_WALKING_CARRYING_WEIGHT) +
             abs(FITNESS_RELEASE_ANYWHERE_WEIGHT) + abs(FITNESS_RELEASE_AT_HOME_WEIGHT) +
             abs(FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT)
         )

@@ -407,9 +407,8 @@ function handleSnapshot(snap) {
     { id: 'antPheromonePlacementChart', species: 'Ant', bestKey: 'released_pheromone_around_food_source_best', avgKey: 'released_pheromone_around_food_source_avg', title: 'Pheromone Placement (near food)', color: '#6fb87a', colorAvg: '#4a7c59' },
     { id: 'antPheromoneSuccessChart', species: 'Ant', bestKey: 'follow_pheromones_best', avgKey: 'follow_pheromones_avg', title: 'Pheromone Success (follow pheromones)', color: '#6fb87a', colorAvg: '#4a7c59' },
     // Ant Carry
-    { id: 'antCarryLossChart', species: 'Ant', bestKey: 'walk_with_object_in_opposite_home_direction_best', avgKey: 'walk_with_object_in_opposite_home_direction_avg', title: 'Carry Loss (walk opposite home)', color: '#c94a4a', colorAvg: '#8c3a3a' },
+    { id: 'antCarryDirectionChart', species: 'Ant', bestKey: 'walking_carrying_best', avgKey: 'walking_carrying_avg', title: 'Carry Direction Quality (heading score)', color: '#5a9e8f', colorAvg: '#3d7a6d', yMin: -1, yMax: 1 },
     { id: 'antCarrySuccessChart', species: 'Ant', bestKey: 'release_at_home_count_best', avgKey: 'release_at_home_count_avg', title: 'Carry Success (release at home)', color: '#6fb87a', colorAvg: '#4a7c59' },
-    { id: 'antCarryHomeChart', species: 'Ant', bestKey: 'walk_with_object_in_home_direction_best', avgKey: 'walk_with_object_in_home_direction_avg', title: 'Carry (walk home direction)', color: '#5a9e8f', colorAvg: '#3d7a6d' },
     // Spider Eat
     { id: 'spiderEatLossChart', species: 'Spider', bestKey: 'times_eating_for_nothing_best', avgKey: 'times_eating_for_nothing_avg', title: 'Eat Loss (eating for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
     { id: 'spiderEatSuccessChart', species: 'Spider', bestKey: 'computed_food_eaten_best', avgKey: 'computed_food_eaten_avg', title: 'Eat Success (food eaten)', color: '#6fb87a', colorAvg: '#4a7c59' },
@@ -418,10 +417,21 @@ function handleSnapshot(snap) {
     { id: 'spiderAttackSuccessChart', species: 'Spider', bestKey: 'computed_enemies_touched_best', avgKey: 'computed_enemies_touched_avg', title: 'Attack Success (enemies touched)', color: '#6fb87a', colorAvg: '#4a7c59' },
   ];
 
-  function createTrainingChart(canvasId, title, bestColor, avgColor) {
+  function createTrainingChart(canvasId, title, bestColor, avgColor, yMin, yMax) {
     const el = document.getElementById(canvasId);
     if (!el) return null;
     const ctx = el.getContext('2d');
+    
+    const yScaleConfig = {
+      type: 'linear',
+      min: yMin !== undefined ? yMin : 0,
+      ticks: { color: '#9b8b7a' },
+      grid: { color: '#3d3228' }
+    };
+    if (yMax !== undefined) {
+      yScaleConfig.max = yMax;
+    }
+
     return new Chart(ctx, {
       type: 'scatter',
       data: {
@@ -447,12 +457,7 @@ function handleSnapshot(snap) {
             },
             grid: { color: 'rgba(255,255,255,0.05)' }
           },
-          y: {
-            type: 'linear',
-            min: 0,
-            ticks: { color: '#9b8b7a' },
-            grid: { color: '#3d3228' }
-          }
+          y: yScaleConfig
         },
         plugins: {
           title: {
@@ -474,7 +479,7 @@ function handleSnapshot(snap) {
 
   function initTrainingCharts() {
     for (const def of TRAINING_CHART_DEFS) {
-      const chart = createTrainingChart(def.id, def.title, def.color, def.colorAvg);
+      const chart = createTrainingChart(def.id, def.title, def.color, def.colorAvg, def.yMin, def.yMax);
       if (chart) {
         trainingCharts[def.id] = chart;
       }
@@ -540,8 +545,13 @@ function handleSnapshot(snap) {
           if (!buckets[bucketIdx]) buckets[bucketIdx] = { sumBest: 0, sumAvg: 0, timeSum: 0, count: 0 };
           const b = buckets[bucketIdx];
 
-          b.sumBest += r.best / Math.max(1.0, r.best_lifetime);
-          b.sumAvg += r.avg / Math.max(1.0, r.avg_lifetime);
+          if (metricName === 'walking_carrying') {
+            b.sumBest += r.best;
+            b.sumAvg += r.avg;
+          } else {
+            b.sumBest += r.best / Math.max(1.0, r.best_lifetime);
+            b.sumAvg += r.avg / Math.max(1.0, r.avg_lifetime);
+          }
           b.timeSum += r.time;
           b.count++;
         }
@@ -556,8 +566,13 @@ function handleSnapshot(snap) {
         }
       } else {
         for (const r of metricRows) {
-          datasetBest.push({ x: r.time, y: r.best / Math.max(1.0, r.best_lifetime) });
-          datasetAvg.push({ x: r.time, y: r.avg / Math.max(1.0, r.avg_lifetime) });
+          if (metricName === 'walking_carrying') {
+            datasetBest.push({ x: r.time, y: r.best });
+            datasetAvg.push({ x: r.time, y: r.avg });
+          } else {
+            datasetBest.push({ x: r.time, y: r.best / Math.max(1.0, r.best_lifetime) });
+            datasetAvg.push({ x: r.time, y: r.avg / Math.max(1.0, r.avg_lifetime) });
+          }
         }
       }
 
