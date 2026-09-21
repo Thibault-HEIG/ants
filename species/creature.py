@@ -24,6 +24,7 @@ from core.constants import (
     CARRY_SPEED_MULTIPLIER,
     EAT_PICKUP_RADIUS,
     ATTACK_DURATION,
+    CARRY_SCORE_PRIOR_FRAMES,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -166,7 +167,8 @@ class Creature(ABC):
         # --- Carry state ---
         self.carried_object: Any | None = None
         self.computed_taken_object: float = 0.0
-        self.walking_carrying: float = 0.0
+        self._carry_score_sum: float = 0.0
+        self._carry_frames: int = 0
         self.computed_release_anywhere: float = 0.0
         self.release_at_home_count: int = 0
         self.take_signal: bool = False
@@ -190,6 +192,11 @@ class Creature(ABC):
     def hunger(self) -> float:
         """Normalised hunger: 0 = full HP, 1 = nearly dead."""
         return 1.0 - clamp(self.health / self.max_health, 0.0, 1.0)
+
+    @property
+    def walking_carrying(self) -> float:
+        """Shrunk running mean of carry direction. 0 if never carried."""
+        return self._carry_score_sum / (self._carry_frames + CARRY_SCORE_PRIOR_FRAMES)
 
     @property
     def genome(self) -> np.ndarray:
@@ -388,8 +395,9 @@ class Creature(ABC):
                     # home_angle_val is already relative-angle/pi in [-1, 1]
                     # Map to reward: 0.0 (facing home) -> 1.0, +/-0.25 (45°) -> 0.5, +/-0.5 (90°) -> 0.0, +/-1.0 (away) -> -1.0
                     reward = 1.0 - 2.0 * abs(home_angle_val)
-                    # Exponential moving average: rewards consistency and not only relying on their past
-                    self.walking_carrying = (self.walking_carrying * 3.0 + reward) / 4.0
+                    # Shrunk mean tracks their true carry performance without over-rewarding lucky small samples
+                    self._carry_score_sum += reward
+                    self._carry_frames += 1
             # Sync carried object position
             self.carried_object.position[0] = self.position[0]
             self.carried_object.position[1] = self.position[1]
