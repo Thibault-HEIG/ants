@@ -95,8 +95,6 @@ def resolve_combat(
         for attacker in attackers:
             if not getattr(attacker, "alive", False) or not getattr(attacker, "is_attacking", False):
                 continue
-            if getattr(attacker, "attack_timer", 1.0) > 0.0:
-                continue
 
             ax = float(attacker.position[0])
             ay = float(attacker.position[1])
@@ -140,7 +138,6 @@ def resolve_combat(
                 attacker.computed_times_attacking_for_nothing += computed_increment
 
             attacker.is_attacking = False
-            attacker.attack_timer = 0.0
 
 
 def resolve_food_collisions(

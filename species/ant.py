@@ -51,6 +51,7 @@ from species.ant_constants import (
     FITNESS_WALKING_CARRYING_WEIGHT,
     FITNESS_RELEASE_ANYWHERE_WEIGHT,
     FITNESS_RELEASE_AT_HOME_WEIGHT,
+    FITNESS_HOME_WITHOUT_FOOD_WEIGHT,
     FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT,
     CAN_ATTACK,
     CAN_TAKE,
@@ -232,12 +233,13 @@ class Ant(Creature):
         walk_carry = self.walking_carrying * FITNESS_WALKING_CARRYING_WEIGHT
         release_anywhere = self.normalize_metric("computed_release_anywhere") * FITNESS_RELEASE_ANYWHERE_WEIGHT
         release_at_home = self.normalize_metric("release_at_home_count") * FITNESS_RELEASE_AT_HOME_WEIGHT
+        home_without_food = self.normalize_metric("home_without_food_count") * FITNESS_HOME_WITHOUT_FOOD_WEIGHT
 
         # Pheromone placement
         pheromone_placement = self.normalize_metric("released_pheromone_around_food_source") * FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT
         
         # Total fitness
-        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_carry + release_anywhere + release_at_home + pheromone_placement)
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_carry + release_anywhere + release_at_home + home_without_food + pheromone_placement)
         
         sum_weights = (
             abs(FITNESS_FOOD_WEIGHT) + abs(FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT) +
@@ -246,6 +248,7 @@ class Ant(Creature):
             abs(FITNESS_TILES_COVERED_WEIGHT) + abs(FITNESS_TAKEN_OBJECT_WEIGHT) +
             abs(FITNESS_WALKING_CARRYING_WEIGHT) +
             abs(FITNESS_RELEASE_ANYWHERE_WEIGHT) + abs(FITNESS_RELEASE_AT_HOME_WEIGHT) +
+            abs(FITNESS_HOME_WITHOUT_FOOD_WEIGHT) +
             abs(FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT)
         )
         if sum_weights != 0:

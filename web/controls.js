@@ -748,9 +748,9 @@ function handleSnapshot(snap) {
       document.getElementById('antAvgFit').innerText = latestAnt.fitness_avg.toFixed(2);
       document.getElementById('antBestLife').innerText = latestAnt.lifetime_best.toFixed(1) + 's';
       document.getElementById('antAvgLife').innerText = latestAnt.lifetime_avg.toFixed(1) + 's';
-      document.getElementById('antBestFood').innerText = latestAnt.food_best.toFixed(0);
+      document.getElementById('antBestFood').innerText = latestAnt.food_best.toFixed(1);
       document.getElementById('antAvgFood').innerText = latestAnt.food_avg.toFixed(1);
-      document.getElementById('antBestEnemies').innerText = latestAnt.enemies_best.toFixed(0);
+      document.getElementById('antBestEnemies').innerText = latestAnt.enemies_best.toFixed(1);
       document.getElementById('antAvgEnemies').innerText = latestAnt.enemies_avg.toFixed(1);
       document.getElementById('antBestTiles').innerText = latestAnt.tiles_best.toFixed(0);
       document.getElementById('antAvgTiles').innerText = latestAnt.tiles_avg.toFixed(1);
@@ -773,9 +773,9 @@ function handleSnapshot(snap) {
       document.getElementById('spiderAvgFit').innerText = latestSpider.fitness_avg.toFixed(2);
       document.getElementById('spiderBestLife').innerText = latestSpider.lifetime_best.toFixed(1) + 's';
       document.getElementById('spiderAvgLife').innerText = latestSpider.lifetime_avg.toFixed(1) + 's';
-      document.getElementById('spiderBestFood').innerText = latestSpider.food_best.toFixed(0);
+      document.getElementById('spiderBestFood').innerText = latestSpider.food_best.toFixed(1);
       document.getElementById('spiderAvgFood').innerText = latestSpider.food_avg.toFixed(1);
-      document.getElementById('spiderBestEnemies').innerText = latestSpider.enemies_best.toFixed(0);
+      document.getElementById('spiderBestEnemies').innerText = latestSpider.enemies_best.toFixed(1);
       document.getElementById('spiderAvgEnemies').innerText = latestSpider.enemies_avg.toFixed(1);
       document.getElementById('spiderBestTiles').innerText = latestSpider.tiles_best.toFixed(0);
       document.getElementById('spiderAvgTiles').innerText = latestSpider.tiles_avg.toFixed(1);

@@ -5,7 +5,7 @@ import os
 import sys
 
 # ---- Set the run ID to delete here ----
-run_id = 27
+run_id = 42
 # ----------------------------------------
 
 db_path = os.path.join(os.path.dirname(__file__), "..", "data", "tracking.db")

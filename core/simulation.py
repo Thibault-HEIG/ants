@@ -25,7 +25,7 @@ TRAINING_METRICS: dict[str, list[str]] = {
         "times_eating_for_nothing", "computed_food_eaten",
         "computed_times_attacking_for_nothing", "computed_enemies_touched",
         "follow_pheromones", "released_pheromone_around_food_source",
-        "walking_carrying", "release_at_home_count",
+        "walking_carrying", "release_at_home_count", "home_without_food_count",
     ],
     "Spider": [
         "times_eating_for_nothing", "computed_food_eaten",

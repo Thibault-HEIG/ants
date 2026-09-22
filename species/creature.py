@@ -155,7 +155,7 @@ class Creature(ABC):
         self._last_tile: tuple[int, int] | None = None
         self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
-        self.attack_timer: float = 0.0
+        self.attack_cooldown: float = 0.0
 
         # --- Eating state machine ---
         self.is_eating: bool = False
@@ -172,6 +172,8 @@ class Creature(ABC):
         self._carry_frames: int = 0
         self.computed_release_anywhere: float = 0.0
         self.release_at_home_count: int = 0
+        self.is_at_home: bool = True
+        self.home_without_food_count: int = 0
         self.take_signal: bool = False
         self.release_signal: bool = False
         self.make_signal: bool = False
@@ -314,6 +316,7 @@ class Creature(ABC):
         home_dist_val = 0.0
         home_angle_val = 0.0
         is_at_home_val = 0.0
+        previously_at_home = self.is_at_home
         self.is_at_home = False
         dist_to_home = 0.0
         if world is not None and hasattr(world, 'kingdoms'):
@@ -328,6 +331,12 @@ class Creature(ABC):
                 home_angle_val = normalize_angle(angle_to_home - self.direction) / math.pi
                 self.is_at_home = dist_to_home <= kingdom.spawn_radius
                 is_at_home_val = 1.0 if self.is_at_home else 0.0
+                
+                # Check transition: entering home radius
+                if self.is_at_home and not previously_at_home:
+                    if self.carried_object is None:
+                        self.home_without_food_count += 1
+                        
         sensor_data.home_distance = home_dist_val
         sensor_data.home_angle = home_angle_val
         sensor_data.is_at_home = is_at_home_val
@@ -362,10 +371,14 @@ class Creature(ABC):
         self._pheromone_cooldown_timer = max(0.0, self._pheromone_cooldown_timer - dt)
 
         # --- Action state machine (priority: attack > eat > take > release) ---
+        
+        # Always tick down cooldowns
+        if self.attack_cooldown > 0.0:
+            self.attack_cooldown -= dt
+
         # While carrying: can't attack, eat, or take. Can only move + release.
         if is_carrying:
             self.is_attacking = False
-            self.attack_timer = 0.0
             self.is_eating = False
             self.eat_timer = 0.0
             self.take_signal = False
@@ -393,7 +406,6 @@ class Creature(ABC):
             self.eat_timer -= dt
             self.speed = 0.0
             self.is_attacking = False
-            self.attack_timer = 0.0
             self.take_signal = False
             self.release_signal = False
             self.make_signal = False
@@ -405,19 +417,16 @@ class Creature(ABC):
                 self.eat_timer = self.eating_time
                 self.speed = 0.0
                 self.is_attacking = False
-                self.attack_timer = 0.0
                 self.take_signal = False
                 self.release_signal = False
                 self.make_signal = False
             else:
                 # Normal movement and combat
-                if self.is_attacking:
-                    # Committed to attack window — resolve on expiry, don't re-trigger
-                    self.attack_timer -= dt
+                if attack_signal > 0.5 and self.attack_cooldown <= 0.0:
+                    self.is_attacking = True
+                    self.attack_cooldown = ATTACK_DURATION
                 else:
-                    if attack_signal > 0.5:
-                        self.is_attacking = True
-                        self.attack_timer = ATTACK_DURATION
+                    self.is_attacking = False
 
                 self.take_signal = bool(take_signal > 0.5)
                 self.release_signal = False  # nothing to release
