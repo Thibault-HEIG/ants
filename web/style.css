@@ -13,7 +13,8 @@
 }
 
 #sectionMain {
-  height: 100vh;
+  min-height: 100vh;
+  height: auto;
 }
 
 .section-analytics, .section-constants {
@@ -76,7 +77,8 @@ header {
 .main-body {
   display: flex;
   flex: 1;
-  height: calc(100vh - 44px);
+  min-height: calc(100vh - 44px);
+  height: auto;
 }
 
 .overview-panel {
@@ -460,3 +462,56 @@ textarea.input-field {
 .chart-container.training-chart {
   height: 220px;
 }
+
+/* Custom subtle range sliders for traits */
+.trait-sliders input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  outline: none;
+}
+
+.trait-sliders input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  border: none;
+}
+
+.trait-sliders input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  border: none;
+}
+
+.trait-sliders input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  width: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: default;
+  margin-top: -3.5px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.trait-sliders input[type="range"]::-moz-range-thumb {
+  height: 10px;
+  width: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: default;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.trait-sliders input[type="range"]:disabled {
+  opacity: 1;
+}
+

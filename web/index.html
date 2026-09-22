@@ -80,6 +80,20 @@
             </div>
             <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
                 id="antEvoMode" class="stat-val">-</span></div>
+                
+            <div class="trait-sliders" style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; margin-bottom: 8px;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">FOV</span>
+                <input type="range" id="antVisionSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-ant);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Range</span>
+              </div>
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">HP</span>
+                <input type="range" id="antPhysiqueSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-ant);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Speed</span>
+              </div>
+            </div>
+
             <table class="metrics-table">
               <thead>
                 <tr>
@@ -130,6 +144,20 @@
             </div>
             <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
                 id="spiderEvoMode" class="stat-val">-</span></div>
+
+            <div class="trait-sliders" style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; margin-bottom: 8px;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">FOV</span>
+                <input type="range" id="spiderVisionSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-spider);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Range</span>
+              </div>
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">HP</span>
+                <input type="range" id="spiderPhysiqueSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-spider);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Speed</span>
+              </div>
+            </div>
+
             <table class="metrics-table">
               <thead>
                 <tr>

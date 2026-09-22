@@ -68,7 +68,8 @@ class StaticFileHandler(http.server.SimpleHTTPRequestHandler):
                         SELECT s.time, l.species_name, l.alive, l.max_pop, 
                                l.fitness_best, l.fitness_avg, l.lifetime_best, l.lifetime_avg,
                                l.food_best, l.food_avg, l.enemies_best, l.enemies_avg,
-                               l.tiles_best, l.tiles_avg, l.release_home_best, l.release_home_avg
+                               l.tiles_best, l.tiles_avg, l.release_home_best, l.release_home_avg,
+                               l.avg_vision_range, l.avg_fov, l.avg_speed, l.avg_hp, l.avg_radius
                         FROM live_stats l JOIN snapshots s ON l.snapshot_id = s.id
                         WHERE s.run_id = ? ORDER BY s.time ASC
                     """, (run_id,))

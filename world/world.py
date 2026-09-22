@@ -111,9 +111,9 @@ class World:
 
         # Phase 3: Lakes — positioned as % of world dimensions to adapt to map resizing
         self.lakes: list[Lake] = [
-            Lake(np.array([self.width * 0.24, self.height * 0.42]), radius=200.0),
-            Lake(np.array([self.width * 0.375, self.height * 0.24]), radius=220.0),
-            Lake(np.array([self.width * 0.51, self.height * 0.56]), radius=200.0),
+            Lake(np.array([self.width * 0.15, self.height * 0.80]), radius=100.0),
+            Lake(np.array([self.width * 0.375, self.height * 0.24]), radius=90.0),
+            Lake(np.array([self.width * 0.51, self.height * 0.56]), radius=80.0),
         ]
 
         # Phase 4: Spatial Tile Grid & Pheromones (10x10 tiles)

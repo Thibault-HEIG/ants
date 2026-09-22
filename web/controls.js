@@ -756,6 +756,15 @@ function handleSnapshot(snap) {
       document.getElementById('antAvgTiles').innerText = latestAnt.tiles_avg.toFixed(1);
       if (document.getElementById('antBestHomeFood')) document.getElementById('antBestHomeFood').innerText = latestAnt.release_home_best.toFixed(0);
       if (document.getElementById('antAvgHomeFood')) document.getElementById('antAvgHomeFood').innerText = latestAnt.release_home_avg.toFixed(1);
+
+      if (document.getElementById('antVisionSlider') && latestAnt.avg_vision_range != null) {
+        let visionGene = (latestAnt.avg_vision_range - 60) / 440;
+        document.getElementById('antVisionSlider').value = Math.max(0, Math.min(1, visionGene)).toFixed(3);
+      }
+      if (document.getElementById('antPhysiqueSlider') && latestAnt.avg_hp != null) {
+        let hpRatio = (latestAnt.avg_hp - 50) / 150;
+        document.getElementById('antPhysiqueSlider').value = Math.max(0, Math.min(1, 1.0 - hpRatio)).toFixed(3);
+      }
     }
 
     if (latestSpider) {
@@ -770,6 +779,15 @@ function handleSnapshot(snap) {
       document.getElementById('spiderAvgEnemies').innerText = latestSpider.enemies_avg.toFixed(1);
       document.getElementById('spiderBestTiles').innerText = latestSpider.tiles_best.toFixed(0);
       document.getElementById('spiderAvgTiles').innerText = latestSpider.tiles_avg.toFixed(1);
+
+      if (document.getElementById('spiderVisionSlider') && latestSpider.avg_vision_range != null) {
+        let visionGene = (latestSpider.avg_vision_range - 100) / 500;
+        document.getElementById('spiderVisionSlider').value = Math.max(0, Math.min(1, visionGene)).toFixed(3);
+      }
+      if (document.getElementById('spiderPhysiqueSlider') && latestSpider.avg_hp != null) {
+        let hpRatio = (latestSpider.avg_hp - 150) / 300;
+        document.getElementById('spiderPhysiqueSlider').value = Math.max(0, Math.min(1, 1.0 - hpRatio)).toFixed(3);
+      }
     }
 
     fitnessChart.options.scales.x.max = maxTime * 1.05;

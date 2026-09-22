@@ -73,9 +73,17 @@ def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
     if alive_count > 0:
         avg_tiles = sum(getattr(c, "tiles_covered", 0.0) for c in living) / alive_count
         avg_release = sum(getattr(c, "release_at_home_count", 0) for c in living) / alive_count
+        avg_vision_range = sum(float(getattr(c, "vision_range", 0.0)) for c in living if hasattr(c, "vision_range")) / alive_count
+        avg_fov = sum(float(getattr(c, "fov", 0.0)) for c in living if hasattr(c, "fov")) / alive_count
+        avg_speed = sum(float(getattr(c, "_max_speed", 0.0)) for c in living) / alive_count
+        avg_hp = sum(float(getattr(c, "max_health", 0.0)) for c in living) / alive_count
     else:
         avg_tiles = 0.0
         avg_release = 0.0
+        avg_vision_range = 0.0
+        avg_fov = 0.0
+        avg_speed = 0.0
+        avg_hp = 0.0
         
     from core.constants import SPECIES_CONFIG
     reproduction_mode = SPECIES_CONFIG.get(species_name, {}).get("reproduction_mode", "continuous").capitalize()
@@ -101,6 +109,10 @@ def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         "avgTilesCovered": float(avg_tiles),
         "bestReleaseAtHome": int(best_release),
         "avgReleaseAtHome": float(avg_release),
+        "avgVisionRange": float(avg_vision_range),
+        "avgFov": float(avg_fov),
+        "avgSpeed": float(avg_speed),
+        "avgHp": float(avg_hp),
     }
 
 def compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:

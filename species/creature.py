@@ -182,6 +182,7 @@ class Creature(ABC):
         self._think_timer: float = THINK_INTERVAL  # start at threshold so first frame thinks
         self._cached_brain_output: np.ndarray = np.zeros(7)
 
+        self.apply_trait_genes()
         self.record_current_tile()
 
     def record_current_tile(self, world_obj: Any | None = None) -> None:
@@ -216,11 +217,42 @@ class Creature(ABC):
 
     def apply_trait_genes(self) -> None:
         """Decode physical trait genes from the genome and update creature attributes.
-
-        Base implementation is a no-op — species without evolved traits keep
-        their static constants.
+        
+        Requires `self.trait_bounds_config` to be set by the subclass.
         """
-        pass
+        if not hasattr(self.brain, "trait_genes") or self.brain.trait_genes is None or len(self.brain.trait_genes) < 2:
+            return
+
+        vision_gene = float(self.brain.trait_genes[0])
+        physique_gene = float(self.brain.trait_genes[1])
+
+        bounds = getattr(self, "trait_bounds_config", None)
+        if not bounds:
+            return
+
+        # Vision trade-off: high gene → long range, narrow FOV
+        self.vision_range = bounds["vision_range_min"] + vision_gene * (bounds["vision_range_max"] - bounds["vision_range_min"])
+        self.fov = bounds["fov_max"] - vision_gene * (bounds["fov_max"] - bounds["fov_min"])
+
+        # Physique trade-off: high gene → slow, tanky
+        new_initial_health = bounds["hp_min"] + physique_gene * (bounds["hp_max"] - bounds["hp_min"])
+        self._max_speed = bounds["speed_max"] - physique_gene * (bounds["speed_max"] - bounds["speed_min"])
+
+        # Derived body size scales with HP
+        hp_ratio = (new_initial_health - bounds["hp_min"]) / max(1.0, bounds["hp_max"] - bounds["hp_min"])
+        self.radius = bounds["base_radius"] * (0.75 + 0.5 * hp_ratio)
+
+        # Apply HP values
+        self.max_health = new_initial_health
+        self.health = new_initial_health
+
+        # Reconfigure sensors in-place with new FOV and range
+        fov_half_rad = math.radians(self.fov) / 2.0
+        self.sensors.reconfigure(
+            sensor_range=self.vision_range,
+            sensor_angle=fov_half_rad,
+            density_radius=self.vision_range,
+        )
 
     def update(self, dt: float, sensor_data: Any, world: Any | None = None) -> None:
         """Advance the creature by one simulation step: sense → think → move → decay.
