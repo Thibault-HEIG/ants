@@ -45,7 +45,12 @@ CREATE TABLE IF NOT EXISTS live_stats (
     tiles_best        REAL NOT NULL,
     tiles_avg         REAL NOT NULL,
     release_home_best INTEGER NOT NULL,
-    release_home_avg  REAL NOT NULL
+    release_home_avg  REAL NOT NULL,
+    avg_vision_range  REAL DEFAULT NULL,
+    avg_fov           REAL DEFAULT NULL,
+    avg_speed         REAL DEFAULT NULL,
+    avg_hp            REAL DEFAULT NULL,
+    avg_radius        REAL DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_livestats_snapshot ON live_stats(snapshot_id, species_name);
 
@@ -79,6 +84,11 @@ CREATE TABLE IF NOT EXISTS creatures (
     tiles_covered               INTEGER NOT NULL,
     release_at_home_count       INTEGER NOT NULL,
     walking_carrying            REAL DEFAULT 0.0,
+    vision_range                REAL DEFAULT NULL,
+    fov                         REAL DEFAULT NULL,
+    speed                       REAL DEFAULT NULL,
+    hp                          REAL DEFAULT NULL,
+    body_radius                 REAL DEFAULT NULL,
     UNIQUE(run_id, creature_uid)
 );
 CREATE INDEX IF NOT EXISTS idx_creatures_run ON creatures(run_id, species_name, creature_uid);

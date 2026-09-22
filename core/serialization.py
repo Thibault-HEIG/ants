@@ -156,6 +156,8 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
                 "carrying": carried_obj is not None,
                 "carriedType": food_type,
                 "radius": float(getattr(c, "radius", 2.0)),
+                "visionRange": round(float(getattr(c, "vision_range", 180.0)), 1),
+                "fov": round(float(getattr(c, "fov", 160.0)), 1),
             })
         creatures_dict[species_name] = c_list
 

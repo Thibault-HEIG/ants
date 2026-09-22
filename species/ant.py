@@ -20,19 +20,22 @@ from species.spider_constants import SPIDER_MAX_SPEED
 from species.ant_constants import (
     ANT_METRIC_BOUNDS,
     ANT_COUNT,
-    ANT_INITIAL_HEALTH,
-    ANT_MAX_SPEED,
-    ANT_RADIUS,
     ANT_STRIKE_RANGE,
     ANT_TURN_RATE,
     ANT_DAMAGE,
     ANT_ATTACK_COST,
     ANT_EATING_TIME,
-    ANT_SENSOR_RANGE,
-    ANT_SENSOR_ANGLE,
     ANT_REPRODUCTION_THRESHOLD,
     MAX_ANTS,
-    DENSITY_RADIUS_ANT,
+    ANT_VISION_RANGE_MIN,
+    ANT_VISION_RANGE_MAX,
+    ANT_FOV_MIN_DEG,
+    ANT_FOV_MAX_DEG,
+    ANT_SPEED_MIN,
+    ANT_SPEED_MAX,
+    ANT_HP_MIN,
+    ANT_HP_MAX,
+    ANT_BASE_RADIUS,
     FITNESS_SURVIVAL_WEIGHT,
     FITNESS_FOOD_WEIGHT,
     FITNESS_ENEMIES_TOUCHED_WEIGHT,
@@ -54,6 +57,7 @@ from species.ant_constants import (
     CAN_MAKE,
     CAN_EAT,
 )
+from evolution.sensors import Sensors
 
 # Pre-computed normalisation constant for pheromone-near-food distance scoring
 _PHEROMONE_DIST_MAX: float = math.sqrt(float(WORLD_WIDTH) ** 2 + float(WORLD_HEIGHT) ** 2) / 3.0
@@ -73,39 +77,77 @@ class Ant(Creature):
     species_name: str = "Ant"
     npc: bool = False
     metrics: dict[str, Any] = ANT_METRIC_BOUNDS
-    initial_health: float = ANT_INITIAL_HEALTH
-    max_speed: float = ANT_MAX_SPEED
-    radius: float = float(ANT_RADIUS)
+    initial_health: float = (ANT_HP_MIN + ANT_HP_MAX) / 2.0
+    max_speed: float = (ANT_SPEED_MIN + ANT_SPEED_MAX) / 2.0
+    radius: float = ANT_BASE_RADIUS
     strike_range: float = ANT_STRIKE_RANGE
     turn_rate: float = ANT_TURN_RATE
     damage: float = ANT_DAMAGE
     attack_cost: float = ANT_ATTACK_COST
     eating_time: float = ANT_EATING_TIME
-    sensor_range: float = ANT_SENSOR_RANGE
-    sensor_angle: float = ANT_SENSOR_ANGLE
+    sensor_range: float = (ANT_VISION_RANGE_MIN + ANT_VISION_RANGE_MAX) / 2.0
     reproduction_threshold: float = ANT_REPRODUCTION_THRESHOLD
     max_population: int = MAX_ANTS
     initial_count: int = ANT_COUNT
 
     def __init__(self, position: np.ndarray, rng: np.random.Generator) -> None:
+        # Default mid-gene values for initial construction (overridden by apply_trait_genes)
+        mid_health = (ANT_HP_MIN + ANT_HP_MAX) / 2.0
+        mid_speed = (ANT_SPEED_MIN + ANT_SPEED_MAX) / 2.0
+        mid_range = (ANT_VISION_RANGE_MIN + ANT_VISION_RANGE_MAX) / 2.0
+        mid_fov_rad = math.radians((ANT_FOV_MIN_DEG + ANT_FOV_MAX_DEG) / 2.0) / 2.0
+
         super().__init__(
             position,
             rng,
-            initial_health=ANT_INITIAL_HEALTH,
-            max_speed=ANT_MAX_SPEED,
-            radius=ANT_RADIUS,
+            initial_health=mid_health,
+            max_speed=mid_speed,
+            radius=ANT_BASE_RADIUS,
             strike_range=ANT_STRIKE_RANGE,
             turn_rate=ANT_TURN_RATE,
             damage=ANT_DAMAGE,
             attack_cost=ANT_ATTACK_COST,
             eating_time=ANT_EATING_TIME,
-            sensor_range=ANT_SENSOR_RANGE,
-            sensor_angle=ANT_SENSOR_ANGLE,
-            density_radius=DENSITY_RADIUS_ANT,
+            sensor_range=mid_range,
+            sensor_angle=mid_fov_rad,
+            density_radius=mid_range,
             can_attack=CAN_ATTACK,
             can_take=CAN_TAKE,
             can_make=CAN_MAKE,
             can_eat=CAN_EAT,
+        )
+        # Attributes for serialization (overridden when genome is installed)
+        self.vision_range: float = mid_range
+        self.fov: float = (ANT_FOV_MIN_DEG + ANT_FOV_MAX_DEG) / 2.0
+
+    def apply_trait_genes(self) -> None:
+        """Decode vision_gene and physique_gene, update all derived physical traits."""
+        trait_genes = self.brain.trait_genes
+        vision_gene = float(trait_genes[0])
+        physique_gene = float(trait_genes[1])
+
+        # Vision trade-off: high gene → long range, narrow FOV
+        self.vision_range = ANT_VISION_RANGE_MIN + vision_gene * (ANT_VISION_RANGE_MAX - ANT_VISION_RANGE_MIN)
+        self.fov = ANT_FOV_MAX_DEG - vision_gene * (ANT_FOV_MAX_DEG - ANT_FOV_MIN_DEG)
+
+        # Physique trade-off: high gene → slow, tanky
+        new_initial_health = ANT_HP_MIN + physique_gene * (ANT_HP_MAX - ANT_HP_MIN)
+        self._max_speed = ANT_SPEED_MAX - physique_gene * (ANT_SPEED_MAX - ANT_SPEED_MIN)
+
+        # Derived body size scales with HP
+        hp_ratio = (new_initial_health - ANT_HP_MIN) / (ANT_HP_MAX - ANT_HP_MIN)
+        self.radius = ANT_BASE_RADIUS * (0.75 + 0.5 * hp_ratio)
+
+        # Apply HP values (fresh spawn starts at max)
+        self.max_health = new_initial_health
+        self.health = new_initial_health
+
+        # Reconfigure sensors in-place with new FOV and range
+        fov_half_rad = math.radians(self.fov) / 2.0
+        self.sensors.reconfigure(
+            sensor_range=self.vision_range,
+            sensor_angle=fov_half_rad,
+            density_radius=self.vision_range,
         )
 
     def get_effective_max_speed(self, zone: float) -> float:

@@ -104,6 +104,7 @@ let latestSnapshot = null;
 let liveConstants = {};
 let previousConstants = null;
 let showSensors = false;
+let pureMode = false;
 let fitnessChart = null;
 let fitnessChartLinear = null;
 let activeTabId = 'tab-live-analytics';
@@ -218,7 +219,7 @@ function handleSnapshot(snap) {
   document.getElementById("btnPause").innerHTML = snap.paused ? "▶ Resume" : "⏸ Pause";
   document.getElementById("ultraBanner").style.display = snap.ultra ? "flex" : "none";
   if (snap.type === "full" && !snap.ultra) {
-    Renderer.render(snap, Renderer.getCamera(), showSensors);
+    Renderer.render(snap, Renderer.getCamera(), showSensors, pureMode);
   }
 }
 
@@ -827,10 +828,15 @@ function handleSnapshot(snap) {
     document.getElementById("btnSpeedUp").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "up" }));
     document.getElementById("btnSpeedDown").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "down" }));
     document.getElementById("btnUltra").onclick = () => ws.send(JSON.stringify({ type: "toggle_ultra" }));
-    document.getElementById("btnSensors").onclick = () => {
+    document.getElementById("btnSensors").addEventListener("click", () => {
       showSensors = !showSensors;
       document.getElementById("btnSensors").classList.toggle("btn-active", showSensors);
-    };
+    });
+
+    document.getElementById("btnPureMode").addEventListener("click", () => {
+      pureMode = !pureMode;
+      document.getElementById("btnPureMode").classList.toggle("btn-active", pureMode);
+    });
 
     const originalHandleSnapshot = handleSnapshot;
     handleSnapshot = function (snap) {
@@ -928,6 +934,9 @@ function handleSnapshot(snap) {
       else if (evt.code === "ArrowLeft" || evt.code === "ArrowDown") { ws.send(JSON.stringify({ type: "set_speed", direction: "down" })); }
       else if (evt.code === "KeyS") { showSensors = !showSensors; document.getElementById("btnSensors").classList.toggle("btn-active", showSensors); }
       else if (evt.code === "KeyU") { ws.send(JSON.stringify({ type: "toggle_ultra" })); }
-      else if (evt.code === "KeyP") { ws.send(JSON.stringify({ type: "print_population" })); }
+      else if (evt.code === "KeyP") { 
+          pureMode = !pureMode; 
+          document.getElementById("btnPureMode").classList.toggle("btn-active", pureMode);
+      }
     });
   });

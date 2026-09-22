@@ -429,6 +429,15 @@ class Sensors:
             for offset in offsets
         ]
 
+    def reconfigure(self, sensor_range: float, sensor_angle: float, density_radius: float | None = None) -> None:
+        """Update sensor parameters in-place without reallocating ray objects."""
+        self.sensor_range = sensor_range
+        self.density_radius = density_radius if density_radius is not None else sensor_range
+        offsets = np.linspace(-sensor_angle, sensor_angle, len(self.rays))
+        for ray, offset in zip(self.rays, offsets):
+            ray.angle_offset = float(offset)
+            ray.max_range = sensor_range
+
     def perceive(
         self,
         position: np.ndarray,

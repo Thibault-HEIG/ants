@@ -210,8 +210,17 @@ class Creature(ABC):
 
     @genome.setter
     def genome(self, value: np.ndarray) -> None:
-        """Install a new genome into the brain."""
+        """Install a new genome into the brain and apply physical trait genes."""
         self.brain.set_genome(value)
+        self.apply_trait_genes()
+
+    def apply_trait_genes(self) -> None:
+        """Decode physical trait genes from the genome and update creature attributes.
+
+        Base implementation is a no-op — species without evolved traits keep
+        their static constants.
+        """
+        pass
 
     def update(self, dt: float, sensor_data: Any, world: Any | None = None) -> None:
         """Advance the creature by one simulation step: sense → think → move → decay.
