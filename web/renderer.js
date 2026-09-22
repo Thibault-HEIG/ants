@@ -1,10 +1,14 @@
 const sprites = {};
-const spriteNames = ['ant', 'spider', 'sugar', 'seed', 'anthill', 'toile'];
+const spriteNames = ['ant', 'spider', 'sugar', 'seed', 'anthill', 'toile', 'pond', 'rock_background'];
 spriteNames.forEach(name => {
   const img = new Image();
   img.src = `/assets/${name}.png`;
   img.onload = () => { sprites[name] = img; };
 });
+
+const bgDirt = new Image();
+bgDirt.src = '/assets/background.jpg';
+bgDirt.onload = () => { sprites['background'] = bgDirt; };
 
 let canvas, ctx;
 let camera = { x: 0, y: 0, zoom: 1 };
@@ -38,34 +42,36 @@ window.Renderer = {
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-snap.world.width / 2, -snap.world.height / 2);
 
-    // World background (Gradient) — cached
-    const wKey = snap.world.width + 'x' + snap.world.height;
-    if (!cachedDirtGrad || cachedWorldSize !== wKey) {
-      cachedDirtGrad = ctx.createLinearGradient(0, 0, snap.world.width / 2, 0);
-      cachedDirtGrad.addColorStop(0, '#3d2b1f');
-      cachedDirtGrad.addColorStop(1, '#2a1f14');
-      cachedRockGrad = ctx.createLinearGradient(snap.world.width / 2, 0, snap.world.width, 0);
-      cachedRockGrad.addColorStop(0, '#2a2d32');
-      cachedRockGrad.addColorStop(1, '#1c1f26');
-      cachedWorldSize = wKey;
+    // Draw left background (dirt)
+    if (sprites['background']) {
+      ctx.drawImage(sprites['background'], 0, 0, snap.world.width, snap.world.height);
+      // Darken the dirt background slightly for better contrast
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(0, 0, snap.world.width, snap.world.height);
+    } else {
+      ctx.fillStyle = '#2a1f14';
+      ctx.fillRect(0, 0, snap.world.width, snap.world.height);
     }
 
-    ctx.fillStyle = cachedDirtGrad;
-    ctx.fillRect(0, 0, snap.world.width / 2, snap.world.height);
-    ctx.fillStyle = cachedRockGrad;
-    ctx.fillRect(snap.world.width / 2, 0, snap.world.width / 2, snap.world.height);
-
-    // Border
-    ctx.strokeStyle = '#3d3228';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, snap.world.width, snap.world.height);
+    // Draw right background (rock)
+    if (sprites['rock_background']) {
+      // The rock background has transparency for the dirt side, so we draw it over the entire world size
+      ctx.save();
+      //Darken the rock image by 80% (brightness 20%) to match the rgba(0, 0, 0, 0.8) intent
+      ctx.filter = 'brightness(40%)';
+      ctx.drawImage(sprites['rock_background'], 0, 0, snap.world.width, snap.world.height);
+      ctx.restore();
+    } else {
+      // Fallback
+      ctx.fillStyle = '#1c1f26';
+      ctx.fillRect(snap.world.width / 2, 0, snap.world.width / 2, snap.world.height);
+    }
 
     // Pheromones
     if (snap.pheromones && snap.pheromones.data) {
       snap.pheromones.data.forEach(([gx, gy, strength]) => {
         const cs = snap.pheromones.cellSize;
-        // Linear opacity: strength [0, 1] maps to alpha [0, 0.6]
-        const alpha = strength * 0.6;
+        const alpha = Math.min(1.0, strength * 1.8);
         ctx.fillStyle = `rgba(255, 255, 138, ${alpha})`;
         ctx.fillRect(gx * cs, gy * cs, cs, cs);
       });
@@ -74,12 +80,19 @@ window.Renderer = {
     // Lakes
     if (snap.lakes) {
       snap.lakes.forEach(l => {
-        ctx.fillStyle = "#1e3a8a";
-        ctx.beginPath();
-        ctx.arc(l.x, l.y, l.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#3b82f6";
-        ctx.stroke();
+        if (sprites['pond']) {
+          ctx.save();
+          ctx.translate(l.x, l.y);
+          ctx.drawImage(sprites['pond'], -l.radius, -l.radius, l.radius * 2, l.radius * 2);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "#1e3a8a";
+          ctx.beginPath();
+          ctx.arc(l.x, l.y, l.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#3b82f6";
+          ctx.stroke();
+        }
       });
     }
 

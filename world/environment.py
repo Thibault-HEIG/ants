@@ -17,7 +17,7 @@ from core.constants import (
     WORLD_HEIGHT,
     MAX_FOOD_SOURCES,
     FOOD_SOURCE_COOLDOWN,
-    ZONE_BOUNDARY_X,
+    get_zone_boundary_x,
     FOOD_SOURCE_LEFT_ZONE_PROB,
     FOOD_SOURCE_RADIUS,
 )
@@ -81,11 +81,12 @@ class EnvironmentSystem:
         if self.source_cooldown <= 0.0 and len(self.food_sources) < MAX_FOOD_SOURCES:
             margin = 50.0
             for _ in range(20):
-                if rng.random() < FOOD_SOURCE_LEFT_ZONE_PROB:
-                    x = rng.uniform(margin, ZONE_BOUNDARY_X - margin)
-                else:
-                    x = rng.uniform(ZONE_BOUNDARY_X + margin, WORLD_WIDTH - margin)
                 y = rng.uniform(margin, WORLD_HEIGHT - margin)
+                bound_x = get_zone_boundary_x(y)
+                if rng.random() < FOOD_SOURCE_LEFT_ZONE_PROB:
+                    x = rng.uniform(margin, bound_x - margin)
+                else:
+                    x = rng.uniform(bound_x + margin, WORLD_WIDTH - margin)
                 pos = np.array([x, y])
                 if not is_in_lake(pos, FOOD_SOURCE_RADIUS, lakes) and not is_in_home(pos, FOOD_SOURCE_RADIUS, kingdoms):
                     new_source = FoodSource(pos, rng)

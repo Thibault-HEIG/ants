@@ -20,11 +20,12 @@ from core.constants import (
     WORLD_HEIGHT,
     HEALTH_DECAY_RATE,
     MAX_AGE_NORMALIZATION,
-    ZONE_BOUNDARY_X,
+    get_zone_boundary_x,
     CARRY_SPEED_MULTIPLIER,
     EAT_PICKUP_RADIUS,
     ATTACK_DURATION,
     CARRY_SCORE_PRIOR_FRAMES,
+    THINK_INTERVAL,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -177,6 +178,10 @@ class Creature(ABC):
         self._pheromone_cooldown_timer: float = 0.0
         self.released_pheromone_around_food_source: float = 0.0
 
+        # --- Brain decision throttling ---
+        self._think_timer: float = THINK_INTERVAL  # start at threshold so first frame thinks
+        self._cached_brain_output: np.ndarray = np.zeros(7)
+
         self.record_current_tile()
 
     def record_current_tile(self, world_obj: Any | None = None) -> None:
@@ -231,7 +236,7 @@ class Creature(ABC):
             self._hp_timer = 0.0
 
         hp_normalized = self.health / self.max_health
-        zone = 1.0 if self.position[0] >= ZONE_BOUNDARY_X else 0.0
+        zone = 1.0 if self.position[0] >= get_zone_boundary_x(self.position[1]) else 0.0
         effective_max_speed = self.get_effective_max_speed(zone)
         is_carrying = self.carried_object is not None
         if is_carrying:
@@ -288,7 +293,13 @@ class Creature(ABC):
 
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 
-        brain_output = self.brain.forward(inputs)
+        # --- Brain decision throttling: only run NN every THINK_INTERVAL ---
+        self._think_timer += dt
+        if self._think_timer >= THINK_INTERVAL:
+            self._think_timer = 0.0
+            self._cached_brain_output = self.brain.forward(inputs)
+
+        brain_output = self._cached_brain_output
         turn_signal = brain_output[0]
         speed_signal = brain_output[1]
         attack_signal = brain_output[2]
