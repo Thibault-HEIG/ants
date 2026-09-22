@@ -17,6 +17,7 @@ let cachedRockGrad = null;
 let cachedWorldSize = null;
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
+let cachedZonePath = null;
 
 window.Renderer = {
   init(canvasEl) {
@@ -50,14 +51,18 @@ window.Renderer = {
         
         // Draw left background (dirt) on top using the jagged boundary
         ctx.fillStyle = '#2a1f14';
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        for (let y = 0; y < window.ZONE_BOUNDARY_MAP.length; y++) {
-          ctx.lineTo(window.ZONE_BOUNDARY_MAP[y], y);
+        
+        if (!cachedZonePath) {
+          cachedZonePath = new Path2D();
+          cachedZonePath.moveTo(0, 0);
+          for (let y = 0; y < window.ZONE_BOUNDARY_MAP.length; y++) {
+            cachedZonePath.lineTo(window.ZONE_BOUNDARY_MAP[y], y);
+          }
+          cachedZonePath.lineTo(0, snap.world.height);
+          cachedZonePath.closePath();
         }
-        ctx.lineTo(0, snap.world.height);
-        ctx.closePath();
-        ctx.fill();
+        
+        ctx.fill(cachedZonePath);
       } else {
         // Fallback if not loaded
         ctx.fillStyle = '#2a1f14';
