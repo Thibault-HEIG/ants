@@ -184,13 +184,26 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         }
 
     food_list = []
+    ant_food_count = 0
+    spider_food_count = 0
+    
+    from core.constants import get_zone_boundary_x
+
     for f in world.food_items:
         if getattr(f, "consumed", False):
             continue
         carried = bool(getattr(f, "being_carried", False))
+        
+        fx, fy = float(f.position[0]), float(f.position[1])
+        bound_x = get_zone_boundary_x(fy)
+        if fx < bound_x:
+            ant_food_count += 1
+        else:
+            spider_food_count += 1
+            
         food_list.append({
-            "x": round(float(f.position[0]), 2),
-            "y": round(float(f.position[1]), 2),
+            "x": round(fx, 2),
+            "y": round(fy, 2),
             "type": getattr(f, "food_type", "sugar"),
             "carried": carried,
         })
@@ -243,6 +256,7 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         "world": {"width": WORLD_WIDTH, "height": WORLD_HEIGHT},
         "creatures": creatures_dict,
         "food": food_list,
+        "foodZoneRepartition": {"ant": ant_food_count, "spider": spider_food_count},
         "foodSources": food_sources_list,
         "kingdoms": kingdoms_list,
         "lakes": lakes_list,
@@ -272,6 +286,19 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
             "maxPop": getattr(cls, "max_population", 100),
         }
 
+    ant_food_count = 0
+    spider_food_count = 0
+    from core.constants import get_zone_boundary_x
+
+    for f in world.food_items:
+        if getattr(f, "consumed", False):
+            continue
+        fx, fy = float(f.position[0]), float(f.position[1])
+        if fx < get_zone_boundary_x(fy):
+            ant_food_count += 1
+        else:
+            spider_food_count += 1
+
     return {
         "type": "aggregate",
         "time": world.round_time,
@@ -284,4 +311,5 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
         "ultra": True,
         "paused": paused,
         "population": population_dict,
+        "foodZoneRepartition": {"ant": ant_food_count, "spider": spider_food_count},
     }
