@@ -4,7 +4,7 @@ import scipy.stats as stats
 
 conn = sqlite3.connect("data/tracking.db") # Créer une connexion
 
-statement = '''SELECT * FROM creatures WHERE run_id = 27 ORDER BY fitness DESC;'''
+statement = '''SELECT * FROM creatures WHERE run_id = 21 ORDER BY fitness DESC;'''
 df = pd.read_sql_query(statement, conn)
 
 df.drop(columns=['run_id', 'species_name', 'enemies_touched', 'computed_enemies_touched', 'times_attacking_for_nothing'], inplace=True)

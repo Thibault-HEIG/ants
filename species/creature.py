@@ -20,11 +20,12 @@ from core.constants import (
     WORLD_HEIGHT,
     HEALTH_DECAY_RATE,
     MAX_AGE_NORMALIZATION,
-    ZONE_BOUNDARY_X,
+    get_zone_boundary_x,
     CARRY_SPEED_MULTIPLIER,
     EAT_PICKUP_RADIUS,
     ATTACK_DURATION,
     CARRY_SCORE_PRIOR_FRAMES,
+    THINK_INTERVAL,
 )
 from core.utils import clamp, normalize_angle, SpeciesStats
 from evolution.brain import Brain
@@ -154,7 +155,7 @@ class Creature(ABC):
         self._last_tile: tuple[int, int] | None = None
         self._last_tile_strength: float = 0.0
         self.is_attacking: bool = False
-        self.attack_timer: float = 0.0
+        self.attack_cooldown: float = 0.0
 
         # --- Eating state machine ---
         self.is_eating: bool = False
@@ -171,12 +172,19 @@ class Creature(ABC):
         self._carry_frames: int = 0
         self.computed_release_anywhere: float = 0.0
         self.release_at_home_count: int = 0
+        self.is_at_home: bool = True
+        self.home_without_food_count: int = 0
         self.take_signal: bool = False
         self.release_signal: bool = False
         self.make_signal: bool = False
         self._pheromone_cooldown_timer: float = 0.0
         self.released_pheromone_around_food_source: float = 0.0
 
+        # --- Brain decision throttling ---
+        self._think_timer: float = THINK_INTERVAL  # start at threshold so first frame thinks
+        self._cached_brain_output: np.ndarray = np.zeros(7)
+
+        self.apply_trait_genes()
         self.record_current_tile()
 
     def record_current_tile(self, world_obj: Any | None = None) -> None:
@@ -205,8 +213,48 @@ class Creature(ABC):
 
     @genome.setter
     def genome(self, value: np.ndarray) -> None:
-        """Install a new genome into the brain."""
+        """Install a new genome into the brain and apply physical trait genes."""
         self.brain.set_genome(value)
+        self.apply_trait_genes()
+
+    def apply_trait_genes(self) -> None:
+        """Decode physical trait genes from the genome and update creature attributes.
+        
+        Requires `self.trait_bounds_config` to be set by the subclass.
+        """
+        if not hasattr(self.brain, "trait_genes") or self.brain.trait_genes is None or len(self.brain.trait_genes) < 2:
+            return
+
+        vision_gene = float(self.brain.trait_genes[0])
+        physique_gene = float(self.brain.trait_genes[1])
+
+        bounds = getattr(self, "trait_bounds_config", None)
+        if not bounds:
+            return
+
+        # Vision trade-off: high gene → long range, narrow FOV
+        self.vision_range = bounds["vision_range_min"] + vision_gene * (bounds["vision_range_max"] - bounds["vision_range_min"])
+        self.fov = bounds["fov_max"] - vision_gene * (bounds["fov_max"] - bounds["fov_min"])
+
+        # Physique trade-off: high gene → slow, tanky
+        new_initial_health = bounds["hp_min"] + physique_gene * (bounds["hp_max"] - bounds["hp_min"])
+        self._max_speed = bounds["speed_max"] - physique_gene * (bounds["speed_max"] - bounds["speed_min"])
+
+        # Derived body size scales with HP
+        hp_ratio = (new_initial_health - bounds["hp_min"]) / max(1.0, bounds["hp_max"] - bounds["hp_min"])
+        self.radius = bounds["base_radius"] * (0.75 + 0.5 * hp_ratio)
+
+        # Apply HP values
+        self.max_health = new_initial_health
+        self.health = new_initial_health
+
+        # Reconfigure sensors in-place with new FOV and range
+        fov_half_rad = math.radians(self.fov) / 2.0
+        self.sensors.reconfigure(
+            sensor_range=self.vision_range,
+            sensor_angle=fov_half_rad,
+            density_radius=self.vision_range,
+        )
 
     def update(self, dt: float, sensor_data: Any, world: Any | None = None) -> None:
         """Advance the creature by one simulation step: sense → think → move → decay.
@@ -231,7 +279,7 @@ class Creature(ABC):
             self._hp_timer = 0.0
 
         hp_normalized = self.health / self.max_health
-        zone = 1.0 if self.position[0] >= ZONE_BOUNDARY_X else 0.0
+        zone = 1.0 if self.position[0] >= get_zone_boundary_x(self.position[1]) else 0.0
         effective_max_speed = self.get_effective_max_speed(zone)
         is_carrying = self.carried_object is not None
         if is_carrying:
@@ -268,6 +316,7 @@ class Creature(ABC):
         home_dist_val = 0.0
         home_angle_val = 0.0
         is_at_home_val = 0.0
+        previously_at_home = self.is_at_home
         self.is_at_home = False
         dist_to_home = 0.0
         if world is not None and hasattr(world, 'kingdoms'):
@@ -282,13 +331,25 @@ class Creature(ABC):
                 home_angle_val = normalize_angle(angle_to_home - self.direction) / math.pi
                 self.is_at_home = dist_to_home <= kingdom.spawn_radius
                 is_at_home_val = 1.0 if self.is_at_home else 0.0
+                
+                # Check transition: entering home radius
+                if self.is_at_home and not previously_at_home:
+                    if self.carried_object is None:
+                        self.home_without_food_count += 1
+                        
         sensor_data.home_distance = home_dist_val
         sensor_data.home_angle = home_angle_val
         sensor_data.is_at_home = is_at_home_val
 
         inputs = sensor_data.to_array(hp_normalized, zone, speed_normalized, age_normalized)
 
-        brain_output = self.brain.forward(inputs)
+        # --- Brain decision throttling: only run NN every THINK_INTERVAL ---
+        self._think_timer += dt
+        if self._think_timer >= THINK_INTERVAL:
+            self._think_timer = 0.0
+            self._cached_brain_output = self.brain.forward(inputs)
+
+        brain_output = self._cached_brain_output
         turn_signal = brain_output[0]
         speed_signal = brain_output[1]
         attack_signal = brain_output[2]
@@ -310,10 +371,14 @@ class Creature(ABC):
         self._pheromone_cooldown_timer = max(0.0, self._pheromone_cooldown_timer - dt)
 
         # --- Action state machine (priority: attack > eat > take > release) ---
+        
+        # Always tick down cooldowns
+        if self.attack_cooldown > 0.0:
+            self.attack_cooldown -= dt
+
         # While carrying: can't attack, eat, or take. Can only move + release.
         if is_carrying:
             self.is_attacking = False
-            self.attack_timer = 0.0
             self.is_eating = False
             self.eat_timer = 0.0
             self.take_signal = False
@@ -341,7 +406,6 @@ class Creature(ABC):
             self.eat_timer -= dt
             self.speed = 0.0
             self.is_attacking = False
-            self.attack_timer = 0.0
             self.take_signal = False
             self.release_signal = False
             self.make_signal = False
@@ -353,19 +417,16 @@ class Creature(ABC):
                 self.eat_timer = self.eating_time
                 self.speed = 0.0
                 self.is_attacking = False
-                self.attack_timer = 0.0
                 self.take_signal = False
                 self.release_signal = False
                 self.make_signal = False
             else:
                 # Normal movement and combat
-                if self.is_attacking:
-                    # Committed to attack window — resolve on expiry, don't re-trigger
-                    self.attack_timer -= dt
+                if attack_signal > 0.5 and self.attack_cooldown <= 0.0:
+                    self.is_attacking = True
+                    self.attack_cooldown = ATTACK_DURATION
                 else:
-                    if attack_signal > 0.5:
-                        self.is_attacking = True
-                        self.attack_timer = ATTACK_DURATION
+                    self.is_attacking = False
 
                 self.take_signal = bool(take_signal > 0.5)
                 self.release_signal = False  # nothing to release

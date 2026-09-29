@@ -104,6 +104,7 @@ let latestSnapshot = null;
 let liveConstants = {};
 let previousConstants = null;
 let showSensors = false;
+let pureMode = false;
 let fitnessChart = null;
 let fitnessChartLinear = null;
 let activeTabId = 'tab-live-analytics';
@@ -208,17 +209,21 @@ function handleSnapshot(snap) {
   document.getElementById("timeDisplay").innerText = snap.time.toFixed(1) + "s";
   document.getElementById("genDisplay").innerText = snap.generation;
 
+  if (snap.foodZoneRepartition) {
+    document.getElementById("zoneFoodDisplay").innerText = `${snap.foodZoneRepartition.ant} | ${snap.foodZoneRepartition.spider}`;
+  }
+
   // Speed display: just the target multiplier
   const target = snap.targetMultiplier !== undefined ? snap.targetMultiplier : snap.speed;
   const actual = snap.actualMultiplier !== undefined ? snap.actualMultiplier : snap.speed;
 
   document.getElementById("speedDisplay").innerText = target + "x";
-  document.getElementById("actualDtDisplay").innerText = "Actual dt: " + Math.round(actual) + "x";
+  document.getElementById("actualDtDisplay").innerText = "Actual dt: " + actual.toFixed(2) + "x";
 
   document.getElementById("btnPause").innerHTML = snap.paused ? "▶ Resume" : "⏸ Pause";
   document.getElementById("ultraBanner").style.display = snap.ultra ? "flex" : "none";
   if (snap.type === "full" && !snap.ultra) {
-    Renderer.render(snap, Renderer.getCamera(), showSensors);
+    Renderer.render(snap, Renderer.getCamera(), showSensors, pureMode);
   }
 }
 
@@ -407,7 +412,7 @@ function handleSnapshot(snap) {
     { id: 'antPheromonePlacementChart', species: 'Ant', bestKey: 'released_pheromone_around_food_source_best', avgKey: 'released_pheromone_around_food_source_avg', title: 'Pheromone Placement (near food)', color: '#6fb87a', colorAvg: '#4a7c59' },
     { id: 'antPheromoneSuccessChart', species: 'Ant', bestKey: 'follow_pheromones_best', avgKey: 'follow_pheromones_avg', title: 'Pheromone Success (follow pheromones)', color: '#6fb87a', colorAvg: '#4a7c59' },
     // Ant Carry
-    { id: 'antCarryDirectionChart', species: 'Ant', bestKey: 'walking_carrying_best', avgKey: 'walking_carrying_avg', title: 'Carry Direction Quality (heading score)', color: '#5a9e8f', colorAvg: '#3d7a6d', yMin: -1, yMax: 1 },
+    { id: 'antCarryDirectionChart', species: 'Ant', bestKey: 'walking_carrying_best', avgKey: 'walking_carrying_avg', title: 'Carry Direction Quality (heading score)', color: '#5a9e8f', colorAvg: '#3d7a6d' },
     { id: 'antCarrySuccessChart', species: 'Ant', bestKey: 'release_at_home_count_best', avgKey: 'release_at_home_count_avg', title: 'Carry Success (release at home)', color: '#6fb87a', colorAvg: '#4a7c59' },
     // Spider Eat
     { id: 'spiderEatLossChart', species: 'Spider', bestKey: 'times_eating_for_nothing_best', avgKey: 'times_eating_for_nothing_avg', title: 'Eat Loss (eating for nothing)', color: '#c94a4a', colorAvg: '#8c3a3a' },
@@ -417,26 +422,24 @@ function handleSnapshot(snap) {
     { id: 'spiderAttackSuccessChart', species: 'Spider', bestKey: 'computed_enemies_touched_best', avgKey: 'computed_enemies_touched_avg', title: 'Attack Success (enemies touched)', color: '#6fb87a', colorAvg: '#4a7c59' },
   ];
 
-  function createTrainingChart(canvasId, title, bestColor, avgColor, yMin, yMax) {
+  function createTrainingChart(canvasId, title, avgColor, yMin, yMax) {
     const el = document.getElementById(canvasId);
     if (!el) return null;
     const ctx = el.getContext('2d');
     
     const yScaleConfig = {
       type: 'linear',
-      min: yMin !== undefined ? yMin : 0,
       ticks: { color: '#9b8b7a' },
       grid: { color: '#3d3228' }
     };
-    if (yMax !== undefined) {
-      yScaleConfig.max = yMax;
-    }
+    
+    if (yMin !== undefined) yScaleConfig.min = yMin;
+    if (yMax !== undefined) yScaleConfig.max = yMax;
 
     return new Chart(ctx, {
       type: 'scatter',
       data: {
         datasets: [
-          { label: 'Best', borderColor: bestColor, borderDash: [4, 4], data: [], borderWidth: 1.5, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
           { label: 'Avg', borderColor: avgColor, data: [], borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true, pointStyle: 'line' },
         ]
       },
@@ -479,7 +482,7 @@ function handleSnapshot(snap) {
 
   function initTrainingCharts() {
     for (const def of TRAINING_CHART_DEFS) {
-      const chart = createTrainingChart(def.id, def.title, def.color, def.colorAvg, def.yMin, def.yMax);
+      const chart = createTrainingChart(def.id, def.title, def.colorAvg, def.yMin, def.yMax);
       if (chart) {
         trainingCharts[def.id] = chart;
       }
@@ -533,7 +536,6 @@ function handleSnapshot(snap) {
       const metricName = def.bestKey.replace('_best', '');
       const metricRows = grouped[def.species][metricName] || [];
 
-      let datasetBest = [];
       let datasetAvg = [];
 
       if (chartRenderingMode === 'Soft') {
@@ -542,14 +544,12 @@ function handleSnapshot(snap) {
 
         for (const r of metricRows) {
           const bucketIdx = Math.floor(r.time / halfGen);
-          if (!buckets[bucketIdx]) buckets[bucketIdx] = { sumBest: 0, sumAvg: 0, timeSum: 0, count: 0 };
+          if (!buckets[bucketIdx]) buckets[bucketIdx] = { sumAvg: 0, timeSum: 0, count: 0 };
           const b = buckets[bucketIdx];
 
           if (metricName === 'walking_carrying') {
-            b.sumBest += r.best;
             b.sumAvg += r.avg;
           } else {
-            b.sumBest += r.best / Math.max(1.0, r.best_lifetime);
             b.sumAvg += r.avg / Math.max(1.0, r.avg_lifetime);
           }
           b.timeSum += r.time;
@@ -560,17 +560,14 @@ function handleSnapshot(snap) {
         for (const bIdx of sortedBuckets) {
           const b = buckets[bIdx];
           if (b.count > 0) {
-            datasetBest.push({ x: b.timeSum / b.count, y: b.sumBest / b.count });
             datasetAvg.push({ x: b.timeSum / b.count, y: b.sumAvg / b.count });
           }
         }
       } else {
         for (const r of metricRows) {
           if (metricName === 'walking_carrying') {
-            datasetBest.push({ x: r.time, y: r.best });
             datasetAvg.push({ x: r.time, y: r.avg });
           } else {
-            datasetBest.push({ x: r.time, y: r.best / Math.max(1.0, r.best_lifetime) });
             datasetAvg.push({ x: r.time, y: r.avg / Math.max(1.0, r.avg_lifetime) });
           }
         }
@@ -581,8 +578,7 @@ function handleSnapshot(snap) {
         if (lastT > maxTime) maxTime = lastT;
       }
 
-      chart.data.datasets[0].data = datasetBest;
-      chart.data.datasets[1].data = datasetAvg;
+      chart.data.datasets[0].data = datasetAvg;
       chart.options.scales.x.max = Math.max(300, maxTime * 1.05);
       chart.update('none');
     }
@@ -743,32 +739,52 @@ function handleSnapshot(snap) {
 
     if (latestAnt) {
       document.getElementById('antAlive').innerText = `${latestAnt.alive}/${latestAnt.max_pop}`;
+      document.getElementById('antEvoMode').innerText = latestAnt.evolutionMode || '-';
       document.getElementById('antBestFit').innerText = latestAnt.fitness_best.toFixed(2);
       document.getElementById('antAvgFit').innerText = latestAnt.fitness_avg.toFixed(2);
       document.getElementById('antBestLife').innerText = latestAnt.lifetime_best.toFixed(1) + 's';
       document.getElementById('antAvgLife').innerText = latestAnt.lifetime_avg.toFixed(1) + 's';
-      document.getElementById('antBestFood').innerText = latestAnt.food_best.toFixed(0);
+      document.getElementById('antBestFood').innerText = latestAnt.food_best.toFixed(1);
       document.getElementById('antAvgFood').innerText = latestAnt.food_avg.toFixed(1);
-      document.getElementById('antBestEnemies').innerText = latestAnt.enemies_best.toFixed(0);
+      document.getElementById('antBestEnemies').innerText = latestAnt.enemies_best.toFixed(1);
       document.getElementById('antAvgEnemies').innerText = latestAnt.enemies_avg.toFixed(1);
       document.getElementById('antBestTiles').innerText = latestAnt.tiles_best.toFixed(0);
       document.getElementById('antAvgTiles').innerText = latestAnt.tiles_avg.toFixed(1);
       if (document.getElementById('antBestHomeFood')) document.getElementById('antBestHomeFood').innerText = latestAnt.release_home_best.toFixed(0);
       if (document.getElementById('antAvgHomeFood')) document.getElementById('antAvgHomeFood').innerText = latestAnt.release_home_avg.toFixed(1);
+
+      if (document.getElementById('antVisionSlider') && latestAnt.avg_vision_range != null) {
+        let visionGene = (latestAnt.avg_vision_range - 60) / 440;
+        document.getElementById('antVisionSlider').value = Math.max(0, Math.min(1, visionGene)).toFixed(3);
+      }
+      if (document.getElementById('antPhysiqueSlider') && latestAnt.avg_hp != null) {
+        let hpRatio = (latestAnt.avg_hp - 50) / 150;
+        document.getElementById('antPhysiqueSlider').value = Math.max(0, Math.min(1, 1.0 - hpRatio)).toFixed(3);
+      }
     }
 
     if (latestSpider) {
       document.getElementById('spiderAlive').innerText = `${latestSpider.alive}/${latestSpider.max_pop}`;
+      document.getElementById('spiderEvoMode').innerText = latestSpider.evolutionMode || '-';
       document.getElementById('spiderBestFit').innerText = latestSpider.fitness_best.toFixed(2);
       document.getElementById('spiderAvgFit').innerText = latestSpider.fitness_avg.toFixed(2);
       document.getElementById('spiderBestLife').innerText = latestSpider.lifetime_best.toFixed(1) + 's';
       document.getElementById('spiderAvgLife').innerText = latestSpider.lifetime_avg.toFixed(1) + 's';
-      document.getElementById('spiderBestFood').innerText = latestSpider.food_best.toFixed(0);
+      document.getElementById('spiderBestFood').innerText = latestSpider.food_best.toFixed(1);
       document.getElementById('spiderAvgFood').innerText = latestSpider.food_avg.toFixed(1);
-      document.getElementById('spiderBestEnemies').innerText = latestSpider.enemies_best.toFixed(0);
+      document.getElementById('spiderBestEnemies').innerText = latestSpider.enemies_best.toFixed(1);
       document.getElementById('spiderAvgEnemies').innerText = latestSpider.enemies_avg.toFixed(1);
       document.getElementById('spiderBestTiles').innerText = latestSpider.tiles_best.toFixed(0);
       document.getElementById('spiderAvgTiles').innerText = latestSpider.tiles_avg.toFixed(1);
+
+      if (document.getElementById('spiderVisionSlider') && latestSpider.avg_vision_range != null) {
+        let visionGene = (latestSpider.avg_vision_range - 100) / 500;
+        document.getElementById('spiderVisionSlider').value = Math.max(0, Math.min(1, visionGene)).toFixed(3);
+      }
+      if (document.getElementById('spiderPhysiqueSlider') && latestSpider.avg_hp != null) {
+        let hpRatio = (latestSpider.avg_hp - 150) / 300;
+        document.getElementById('spiderPhysiqueSlider').value = Math.max(0, Math.min(1, 1.0 - hpRatio)).toFixed(3);
+      }
     }
 
     fitnessChart.options.scales.x.max = maxTime * 1.05;
@@ -827,10 +843,15 @@ function handleSnapshot(snap) {
     document.getElementById("btnSpeedUp").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "up" }));
     document.getElementById("btnSpeedDown").onclick = () => ws.send(JSON.stringify({ type: "set_speed", direction: "down" }));
     document.getElementById("btnUltra").onclick = () => ws.send(JSON.stringify({ type: "toggle_ultra" }));
-    document.getElementById("btnSensors").onclick = () => {
+    document.getElementById("btnSensors").addEventListener("click", () => {
       showSensors = !showSensors;
       document.getElementById("btnSensors").classList.toggle("btn-active", showSensors);
-    };
+    });
+
+    document.getElementById("btnPureMode").addEventListener("click", () => {
+      pureMode = !pureMode;
+      document.getElementById("btnPureMode").classList.toggle("btn-active", pureMode);
+    });
 
     const originalHandleSnapshot = handleSnapshot;
     handleSnapshot = function (snap) {
@@ -928,6 +949,9 @@ function handleSnapshot(snap) {
       else if (evt.code === "ArrowLeft" || evt.code === "ArrowDown") { ws.send(JSON.stringify({ type: "set_speed", direction: "down" })); }
       else if (evt.code === "KeyS") { showSensors = !showSensors; document.getElementById("btnSensors").classList.toggle("btn-active", showSensors); }
       else if (evt.code === "KeyU") { ws.send(JSON.stringify({ type: "toggle_ultra" })); }
-      else if (evt.code === "KeyP") { ws.send(JSON.stringify({ type: "print_population" })); }
+      else if (evt.code === "KeyP") { 
+          pureMode = !pureMode; 
+          document.getElementById("btnPureMode").classList.toggle("btn-active", pureMode);
+      }
     });
   });

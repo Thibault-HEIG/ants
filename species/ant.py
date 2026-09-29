@@ -16,23 +16,26 @@ import numpy as np
 from core.constants import WORLD_WIDTH, WORLD_HEIGHT
 from core.utils import normalize_angle
 from species.creature import Creature
-from species.spider_constants import SPIDER_MAX_SPEED
+from species.spider_constants import SPIDER_SPEED_MAX
 from species.ant_constants import (
     ANT_METRIC_BOUNDS,
     ANT_COUNT,
-    ANT_INITIAL_HEALTH,
-    ANT_MAX_SPEED,
-    ANT_RADIUS,
     ANT_STRIKE_RANGE,
     ANT_TURN_RATE,
     ANT_DAMAGE,
     ANT_ATTACK_COST,
     ANT_EATING_TIME,
-    ANT_SENSOR_RANGE,
-    ANT_SENSOR_ANGLE,
     ANT_REPRODUCTION_THRESHOLD,
     MAX_ANTS,
-    DENSITY_RADIUS_ANT,
+    ANT_VISION_RANGE_MIN,
+    ANT_VISION_RANGE_MAX,
+    ANT_FOV_MIN_DEG,
+    ANT_FOV_MAX_DEG,
+    ANT_SPEED_MIN,
+    ANT_SPEED_MAX,
+    ANT_HP_MIN,
+    ANT_HP_MAX,
+    ANT_BASE_RADIUS,
     FITNESS_SURVIVAL_WEIGHT,
     FITNESS_FOOD_WEIGHT,
     FITNESS_ENEMIES_TOUCHED_WEIGHT,
@@ -48,12 +51,14 @@ from species.ant_constants import (
     FITNESS_WALKING_CARRYING_WEIGHT,
     FITNESS_RELEASE_ANYWHERE_WEIGHT,
     FITNESS_RELEASE_AT_HOME_WEIGHT,
+    FITNESS_HOME_WITHOUT_FOOD_WEIGHT,
     FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT,
     CAN_ATTACK,
     CAN_TAKE,
     CAN_MAKE,
     CAN_EAT,
 )
+from evolution.sensors import Sensors
 
 # Pre-computed normalisation constant for pheromone-near-food distance scoring
 _PHEROMONE_DIST_MAX: float = math.sqrt(float(WORLD_WIDTH) ** 2 + float(WORLD_HEIGHT) ** 2) / 3.0
@@ -73,35 +78,36 @@ class Ant(Creature):
     species_name: str = "Ant"
     npc: bool = False
     metrics: dict[str, Any] = ANT_METRIC_BOUNDS
-    initial_health: float = ANT_INITIAL_HEALTH
-    max_speed: float = ANT_MAX_SPEED
-    radius: float = float(ANT_RADIUS)
     strike_range: float = ANT_STRIKE_RANGE
     turn_rate: float = ANT_TURN_RATE
     damage: float = ANT_DAMAGE
     attack_cost: float = ANT_ATTACK_COST
     eating_time: float = ANT_EATING_TIME
-    sensor_range: float = ANT_SENSOR_RANGE
-    sensor_angle: float = ANT_SENSOR_ANGLE
     reproduction_threshold: float = ANT_REPRODUCTION_THRESHOLD
     max_population: int = MAX_ANTS
     initial_count: int = ANT_COUNT
+
+    trait_bounds_config: dict[str, float] = {
+        "hp_min": ANT_HP_MIN,
+        "hp_max": ANT_HP_MAX,
+        "speed_min": ANT_SPEED_MIN,
+        "speed_max": ANT_SPEED_MAX,
+        "vision_range_min": ANT_VISION_RANGE_MIN,
+        "vision_range_max": ANT_VISION_RANGE_MAX,
+        "fov_min": ANT_FOV_MIN_DEG,
+        "fov_max": ANT_FOV_MAX_DEG,
+        "base_radius": ANT_BASE_RADIUS,
+    }
 
     def __init__(self, position: np.ndarray, rng: np.random.Generator) -> None:
         super().__init__(
             position,
             rng,
-            initial_health=ANT_INITIAL_HEALTH,
-            max_speed=ANT_MAX_SPEED,
-            radius=ANT_RADIUS,
             strike_range=ANT_STRIKE_RANGE,
             turn_rate=ANT_TURN_RATE,
             damage=ANT_DAMAGE,
             attack_cost=ANT_ATTACK_COST,
             eating_time=ANT_EATING_TIME,
-            sensor_range=ANT_SENSOR_RANGE,
-            sensor_angle=ANT_SENSOR_ANGLE,
-            density_radius=DENSITY_RADIUS_ANT,
             can_attack=CAN_ATTACK,
             can_take=CAN_TAKE,
             can_make=CAN_MAKE,
@@ -109,9 +115,9 @@ class Ant(Creature):
         )
 
     def get_effective_max_speed(self, zone: float) -> float:
-        """Ants move at normal speed in Ants Zone (0.0), but are slowed down to SPIDER_MAX_SPEED in Spiders Zone (1.0)."""
+        """Ants move at normal speed in Ants Zone (0.0), but are slowed down to SPIDER_SPEED_MAX in Spiders Zone (1.0)."""
         if zone >= 0.5:
-            return SPIDER_MAX_SPEED
+            return SPIDER_SPEED_MAX
         return self._max_speed
 
     def update(self, dt: float, sensor_data: Any, world: Any | None = None) -> None:
@@ -227,12 +233,13 @@ class Ant(Creature):
         walk_carry = self.walking_carrying * FITNESS_WALKING_CARRYING_WEIGHT
         release_anywhere = self.normalize_metric("computed_release_anywhere") * FITNESS_RELEASE_ANYWHERE_WEIGHT
         release_at_home = self.normalize_metric("release_at_home_count") * FITNESS_RELEASE_AT_HOME_WEIGHT
+        home_without_food = self.normalize_metric("home_without_food_count") * FITNESS_HOME_WITHOUT_FOOD_WEIGHT
 
         # Pheromone placement
         pheromone_placement = self.normalize_metric("released_pheromone_around_food_source") * FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT
         
         # Total fitness
-        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_carry + release_anywhere + release_at_home + pheromone_placement)
+        total = (food_eaten + eating_for_nothing + enemies_touched + attacking_for_nothing + follow_pheromones + survival_time + tiles_covered + taken_object + walk_carry + release_anywhere + release_at_home + home_without_food + pheromone_placement)
         
         sum_weights = (
             abs(FITNESS_FOOD_WEIGHT) + abs(FITNESS_TIMES_EATING_FOR_NOTHING_WEIGHT) +
@@ -241,6 +248,7 @@ class Ant(Creature):
             abs(FITNESS_TILES_COVERED_WEIGHT) + abs(FITNESS_TAKEN_OBJECT_WEIGHT) +
             abs(FITNESS_WALKING_CARRYING_WEIGHT) +
             abs(FITNESS_RELEASE_ANYWHERE_WEIGHT) + abs(FITNESS_RELEASE_AT_HOME_WEIGHT) +
+            abs(FITNESS_HOME_WITHOUT_FOOD_WEIGHT) +
             abs(FITNESS_RELEASED_PHEROMONE_AROUND_FOOD_SOURCE_WEIGHT)
         )
         if sum_weights != 0:

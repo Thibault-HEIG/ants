@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.constants import NN_INPUTS, NN_HIDDEN_1, NN_HIDDEN_2, NN_OUTPUTS, GENOME_SIZE
+from core.constants import NN_INPUTS, NN_HIDDEN_1, NN_HIDDEN_2, NN_OUTPUTS, GENOME_SIZE, NN_GENOME_SIZE, NUM_TRAIT_GENES
 from evolution.network import NeuralNetwork
 
 
@@ -32,6 +32,7 @@ class Brain:
             rng=rng,
         )
         self._cached_genome: np.ndarray | None = None
+        self.trait_genes: np.ndarray = np.full(NUM_TRAIT_GENES, 0.5)
 
     # ------------------------------------------------------------------
     # Properties delegating to underlying network
@@ -133,7 +134,7 @@ class Brain:
     # ------------------------------------------------------------------
 
     def get_genome(self) -> np.ndarray:
-        """Flatten all weights and biases into a single 1-D vector (size 1468)."""
+        """Flatten all weights, biases, and trait genes into a single 1-D vector."""
         if self._cached_genome is None:
             self._cached_genome = np.concatenate([
                 self.weights_input_hidden1.flatten(),
@@ -142,11 +143,16 @@ class Brain:
                 self.bias_hidden2.flatten(),
                 self.weights_hidden2_output.flatten(),
                 self.bias_output.flatten(),
+                self.trait_genes,
             ])
         return self._cached_genome
 
     def set_genome(self, genome: np.ndarray) -> None:
-        """Reconstruct all weight matrices from a flat genome vector."""
+        """Reconstruct all weight matrices and trait genes from a flat genome vector."""
+        # Backward compatibility: pad old genomes (pre-trait) with default trait values
+        if genome.shape[0] == NN_GENOME_SIZE:
+            genome = np.concatenate([genome, np.full(NUM_TRAIT_GENES, 0.5)])
+
         assert genome.shape == (GENOME_SIZE,), (
             f"Expected genome of length {GENOME_SIZE}, got {genome.shape}"
         )
@@ -178,6 +184,9 @@ class Brain:
         idx += size_h2o
 
         self.bias_output = genome[idx:idx + NN_OUTPUTS].copy()
+        idx += NN_OUTPUTS
+
+        self.trait_genes = genome[idx:idx + NUM_TRAIT_GENES].copy()
         self._cached_genome = genome.copy()
 
     @classmethod

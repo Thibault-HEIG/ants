@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from core.constants import CONTINUOUS_SELECTION_FRACTION, CONTINUOUS_MUTATION_RATE, CONTINUOUS_MUTATION_STRENGTH
+from core.constants import CONTINUOUS_SELECTION_FRACTION, CONTINUOUS_MUTATION_RATE, CONTINUOUS_MUTATION_STRENGTH, NUM_TRAIT_GENES
 
 Creature = Any
 
@@ -45,15 +45,25 @@ def mutate(
     mutation_rate: float = CONTINUOUS_MUTATION_RATE,
     mutation_strength: float = CONTINUOUS_MUTATION_STRENGTH,
 ) -> np.ndarray:
-    """Create a mutated copy of a genome by adding Gaussian noise to genes."""
+    """Create a mutated copy of a genome by adding Gaussian noise to NN weights and trait genes."""
     child = genome.copy()
+    nn_size = len(child) - NUM_TRAIT_GENES
 
+    # Probabilistic mutation for NN weights
+    nn_part = child[:nn_size]
     if mutation_rate >= 1.0:
-        child += rng.normal(0.0, mutation_strength, size=child.shape)
+        nn_part += rng.normal(0.0, mutation_strength, size=nn_part.shape)
     else:
-        mask = rng.random(size=child.shape) < mutation_rate
-        noise = rng.normal(0.0, mutation_strength, size=child.shape)
-        child += mask * noise
+        mask = rng.random(size=nn_part.shape) < mutation_rate
+        noise = rng.normal(0.0, mutation_strength, size=nn_part.shape)
+        nn_part += mask * noise
+    child[:nn_size] = nn_part
+
+    # Trait genes always mutate with moderate noise, clamped to [0, 1]
+    trait_part = child[nn_size:]
+    trait_part += rng.normal(0.0, 0.05, size=trait_part.shape)
+    np.clip(trait_part, 0.0, 1.0, out=trait_part)
+    child[nn_size:] = trait_part
 
     return child
 

@@ -9,6 +9,7 @@ Overrides species-specific constants, zone speed behaviors, and fitness logic.
 from __future__ import annotations
 
 from typing import Any
+import math
 
 import numpy as np
 
@@ -16,19 +17,13 @@ from species.creature import Creature
 from species.spider_constants import (
     SPIDER_METRIC_BOUNDS,
     SPIDER_COUNT,
-    SPIDER_INITIAL_HEALTH,
-    SPIDER_MAX_SPEED,
-    SPIDER_RADIUS,
     SPIDER_STRIKE_RANGE,
     SPIDER_TURN_RATE,
     SPIDER_DAMAGE,
     SPIDER_ATTACK_COST,
     SPIDER_EATING_TIME,
-    SPIDER_SENSOR_RANGE,
-    SPIDER_SENSOR_ANGLE,
     SPIDER_REPRODUCTION_THRESHOLD,
     MAX_SPIDERS,
-    DENSITY_RADIUS_SPIDER,
     FITNESS_SURVIVAL_WEIGHT,
     FITNESS_FOOD_WEIGHT,
     FITNESS_ENEMIES_TOUCHED_WEIGHT,
@@ -40,6 +35,15 @@ from species.spider_constants import (
     CAN_TAKE,
     CAN_MAKE,
     CAN_EAT,
+    SPIDER_SPEED_MIN,
+    SPIDER_SPEED_MAX,
+    SPIDER_BASE_RADIUS,
+    SPIDER_HP_MIN,
+    SPIDER_HP_MAX,
+    SPIDER_VISION_RANGE_MIN,
+    SPIDER_VISION_RANGE_MAX,
+    SPIDER_FOV_MIN_DEG,
+    SPIDER_FOV_MAX_DEG,
 )
 
 
@@ -57,35 +61,36 @@ class Spider(Creature):
     species_name: str = "Spider"
     npc: bool = False
     metrics: dict[str, Any] = SPIDER_METRIC_BOUNDS
-    initial_health: float = SPIDER_INITIAL_HEALTH
-    max_speed: float = SPIDER_MAX_SPEED
-    radius: float = float(SPIDER_RADIUS)
     strike_range: float = SPIDER_STRIKE_RANGE
     turn_rate: float = SPIDER_TURN_RATE
     damage: float = SPIDER_DAMAGE
     attack_cost: float = SPIDER_ATTACK_COST
     eating_time: float = SPIDER_EATING_TIME
-    sensor_range: float = SPIDER_SENSOR_RANGE
-    sensor_angle: float = SPIDER_SENSOR_ANGLE
     reproduction_threshold: float = SPIDER_REPRODUCTION_THRESHOLD
     max_population: int = MAX_SPIDERS
     initial_count: int = SPIDER_COUNT
+
+    trait_bounds_config: dict[str, float] = {
+        "hp_min": SPIDER_HP_MIN,
+        "hp_max": SPIDER_HP_MAX,
+        "speed_min": SPIDER_SPEED_MIN,
+        "speed_max": SPIDER_SPEED_MAX,
+        "vision_range_min": SPIDER_VISION_RANGE_MIN,
+        "vision_range_max": SPIDER_VISION_RANGE_MAX,
+        "fov_min": SPIDER_FOV_MIN_DEG,
+        "fov_max": SPIDER_FOV_MAX_DEG,
+        "base_radius": SPIDER_BASE_RADIUS,
+    }
 
     def __init__(self, position: np.ndarray, rng: np.random.Generator) -> None:
         super().__init__(
             position,
             rng,
-            initial_health=SPIDER_INITIAL_HEALTH,
-            max_speed=SPIDER_MAX_SPEED,
-            radius=SPIDER_RADIUS,
             strike_range=SPIDER_STRIKE_RANGE,
             turn_rate=SPIDER_TURN_RATE,
             damage=SPIDER_DAMAGE,
             attack_cost=SPIDER_ATTACK_COST,
             eating_time=SPIDER_EATING_TIME,
-            sensor_range=SPIDER_SENSOR_RANGE,
-            sensor_angle=SPIDER_SENSOR_ANGLE,
-            density_radius=DENSITY_RADIUS_SPIDER,
             can_attack=CAN_ATTACK,
             can_take=CAN_TAKE,
             can_make=CAN_MAKE,

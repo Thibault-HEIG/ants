@@ -47,6 +47,7 @@
 
           <button class="btn" id="btnSensors" title="S key">👁 Rays</button>
           <button class="btn" id="btnUltra" title="U key">⚡ Ultra</button>
+          <button class="btn" id="btnPureMode" title="P key">🟩 Pure</button>
 
           <button class="btn" id="btnControls">⌨ Controls</button>
 
@@ -69,8 +70,9 @@
           <div class="section-title">Ecosystem Overview</div>
           <div class="stat-row"><span class="stat-label">Time</span><span id="timeDisplay" class="stat-val">0.0s</span>
           </div>
-          <div class="stat-row" style="margin-bottom: 1rem;"><span class="stat-label">Generation</span><span
-              id="genDisplay" class="stat-val">1</span></div>
+          <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Generation</span><span id="genDisplay" class="stat-val">1</span></div>
+
+          <div class="stat-row" style="margin-bottom: 1rem;"><span class="stat-label">Zone Food</span><span id="zoneFoodDisplay" class="stat-val">-</span></div>
 
           <div class="species-card ant">
             <div class="species-name" style="color: var(--accent-ant);">
@@ -79,6 +81,20 @@
             </div>
             <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
                 id="antEvoMode" class="stat-val">-</span></div>
+                
+            <div class="trait-sliders" style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; margin-bottom: 8px;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">FOV</span>
+                <input type="range" id="antVisionSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-ant);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Range</span>
+              </div>
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">HP</span>
+                <input type="range" id="antPhysiqueSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-ant);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Speed</span>
+              </div>
+            </div>
+
             <table class="metrics-table">
               <thead>
                 <tr>
@@ -129,6 +145,20 @@
             </div>
             <div class="stat-row" style="margin-bottom: 0.5rem;"><span class="stat-label">Evolution Mode</span><span
                 id="spiderEvoMode" class="stat-val">-</span></div>
+
+            <div class="trait-sliders" style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; margin-bottom: 8px;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">FOV</span>
+                <input type="range" id="spiderVisionSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-spider);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Range</span>
+              </div>
+              <div class="slider-container" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem;">
+                <span style="color: var(--text-muted); width: 35px; text-align: left;">HP</span>
+                <input type="range" id="spiderPhysiqueSlider" min="0" max="1" step="0.01" value="0.5" disabled style="flex-grow: 1; margin: 0 8px; color: var(--accent-spider);">
+                <span style="color: var(--text-muted); width: 35px; text-align: right;">Speed</span>
+              </div>
+            </div>
+
             <table class="metrics-table">
               <thead>
                 <tr>
@@ -335,8 +365,8 @@
                 <td>Toggle Ultra Mode (Fast Exec)</td>
               </tr>
               <tr>
-                <td class="mono">P</td>
-                <td>Print Population Recap (Server Console)</td>
+                <td class="mono">p</td>
+                <td>Toggle Pure Mode (Colored box backgrounds)</td>
               </tr>
             </tbody>
           </table>
@@ -368,6 +398,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="zone_boundary.js"></script>
     <script src="renderer.js"></script>
     <script src="controls.js"></script>
 </body>

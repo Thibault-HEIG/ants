@@ -48,6 +48,18 @@ class TrackingDB:
                 self.conn.execute("ALTER TABLE snapshots ADD COLUMN recent_code_changes INTEGER DEFAULT 0")
             except sqlite3.OperationalError:
                 pass
+            # Trait columns migration for creatures table
+            for col in ['vision_range', 'fov', 'speed', 'hp', 'body_radius']:
+                try:
+                    self.conn.execute(f"ALTER TABLE creatures ADD COLUMN {col} REAL DEFAULT NULL")
+                except sqlite3.OperationalError:
+                    pass
+            # Trait average columns migration for live_stats table
+            for col in ['avg_vision_range', 'avg_fov', 'avg_speed', 'avg_hp', 'avg_radius']:
+                try:
+                    self.conn.execute(f"ALTER TABLE live_stats ADD COLUMN {col} REAL DEFAULT NULL")
+                except sqlite3.OperationalError:
+                    pass
 
     def start_run(self, notes: str = "") -> int:
         """Insert a new run row and return its id."""
@@ -135,14 +147,25 @@ class TrackingDB:
                         tm_rows,
                     )
 
+                # Compute trait averages for living creatures
+                if living:
+                    avg_vision_range = sum(float(getattr(c, "vision_range", 0.0)) for c in living if hasattr(c, "vision_range")) / max(1, len(living))
+                    avg_fov = sum(float(getattr(c, "fov", 0.0)) for c in living if hasattr(c, "fov")) / max(1, len(living))
+                    avg_speed = sum(float(getattr(c, "_max_speed", 0.0)) for c in living) / len(living)
+                    avg_hp = sum(float(getattr(c, "max_health", 0.0)) for c in living) / len(living)
+                    avg_radius = sum(float(getattr(c, "radius", 0.0)) for c in living) / len(living)
+                else:
+                    avg_vision_range = avg_fov = avg_speed = avg_hp = avg_radius = None
+
                 # --- live_stats ---
                 self.conn.execute(
                     "INSERT INTO live_stats "
                     "(snapshot_id, species_name, generation, alive, max_pop, "
                     "fitness_best, fitness_avg, lifetime_best, lifetime_avg, "
                     "food_best, food_avg, enemies_best, enemies_avg, "
-                    "tiles_best, tiles_avg, release_home_best, release_home_avg) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "tiles_best, tiles_avg, release_home_best, release_home_avg, "
+                    "avg_vision_range, avg_fov, avg_speed, avg_hp, avg_radius) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         snapshot_id, species_name, generation,
                         stats["alive"], stats["maxPop"],
@@ -152,6 +175,7 @@ class TrackingDB:
                         stats["bestComputedEnemies"], stats["avgComputedEnemies"],
                         stats["bestTilesCovered"], stats["avgTilesCovered"],
                         stats["bestReleaseAtHome"], stats["avgReleaseAtHome"],
+                        avg_vision_range, avg_fov, avg_speed, avg_hp, avg_radius,
                     ),
                 )
 
@@ -196,6 +220,11 @@ class TrackingDB:
                         int(getattr(c, "tiles_covered", 0)),
                         int(getattr(c, "release_at_home_count", 0)),
                         float(getattr(c, "walking_carrying", 0.0)),
+                        float(getattr(c, "vision_range", 0.0)) if hasattr(c, "vision_range") else None,
+                        float(getattr(c, "fov", 0.0)) if hasattr(c, "fov") else None,
+                        float(getattr(c, "_max_speed", 0.0)),
+                        float(getattr(c, "max_health", 0.0)),
+                        float(getattr(c, "radius", 0.0)),
                     ))
                 for c in world.dead_creatures.get(cls, []):
                     fitness = float(c.compute_fitness())
@@ -212,6 +241,11 @@ class TrackingDB:
                         int(getattr(c, "tiles_covered", 0)),
                         int(getattr(c, "release_at_home_count", 0)),
                         float(getattr(c, "walking_carrying", 0.0)),
+                        float(getattr(c, "vision_range", 0.0)) if hasattr(c, "vision_range") else None,
+                        float(getattr(c, "fov", 0.0)) if hasattr(c, "fov") else None,
+                        float(getattr(c, "_max_speed", 0.0)),
+                        float(getattr(c, "max_health", 0.0)),
+                        float(getattr(c, "radius", 0.0)),
                     ))
                 if cs_rows:
                     self.conn.executemany(
@@ -219,8 +253,9 @@ class TrackingDB:
                         "(run_id, species_name, generation, creature_uid, is_alive, fitness, "
                         "lifetime, food_eaten, computed_food_eaten, times_eating_for_nothing, "
                         "enemies_touched, computed_enemies_touched, times_attacking_for_nothing, "
-                        "tiles_covered, release_at_home_count, walking_carrying) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        "tiles_covered, release_at_home_count, walking_carrying, "
+                        "vision_range, fov, speed, hp, body_radius) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         "ON CONFLICT(run_id, creature_uid) DO UPDATE SET "
                         "is_alive = excluded.is_alive, "
                         "fitness = excluded.fitness, "
@@ -233,7 +268,12 @@ class TrackingDB:
                         "times_attacking_for_nothing = excluded.times_attacking_for_nothing, "
                         "tiles_covered = excluded.tiles_covered, "
                         "release_at_home_count = excluded.release_at_home_count, "
-                        "walking_carrying = excluded.walking_carrying",
+                        "walking_carrying = excluded.walking_carrying, "
+                        "vision_range = excluded.vision_range, "
+                        "fov = excluded.fov, "
+                        "speed = excluded.speed, "
+                        "hp = excluded.hp, "
+                        "body_radius = excluded.body_radius",
                         cs_rows,
                     )
 

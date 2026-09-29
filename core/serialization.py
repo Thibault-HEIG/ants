@@ -73,9 +73,17 @@ def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
     if alive_count > 0:
         avg_tiles = sum(getattr(c, "tiles_covered", 0.0) for c in living) / alive_count
         avg_release = sum(getattr(c, "release_at_home_count", 0) for c in living) / alive_count
+        avg_vision_range = sum(float(getattr(c, "vision_range", 0.0)) for c in living if hasattr(c, "vision_range")) / alive_count
+        avg_fov = sum(float(getattr(c, "fov", 0.0)) for c in living if hasattr(c, "fov")) / alive_count
+        avg_speed = sum(float(getattr(c, "_max_speed", 0.0)) for c in living) / alive_count
+        avg_hp = sum(float(getattr(c, "max_health", 0.0)) for c in living) / alive_count
     else:
         avg_tiles = 0.0
         avg_release = 0.0
+        avg_vision_range = 0.0
+        avg_fov = 0.0
+        avg_speed = 0.0
+        avg_hp = 0.0
         
     from core.constants import SPECIES_CONFIG
     reproduction_mode = SPECIES_CONFIG.get(species_name, {}).get("reproduction_mode", "continuous").capitalize()
@@ -101,6 +109,10 @@ def compute_species_stats(world: Any, cls: type) -> dict[str, Any]:
         "avgTilesCovered": float(avg_tiles),
         "bestReleaseAtHome": int(best_release),
         "avgReleaseAtHome": float(avg_release),
+        "avgVisionRange": float(avg_vision_range),
+        "avgFov": float(avg_fov),
+        "avgSpeed": float(avg_speed),
+        "avgHp": float(avg_hp),
     }
 
 def compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
@@ -121,6 +133,37 @@ def compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
             "bound": float(bound_val)
         }
     return res
+
+
+def _process_food_items(food_items: list[Any], build_list: bool) -> tuple[list[dict[str, Any]], int, int]:
+    """Process food items to calculate zone counts and optionally build the serialization list."""
+    from core.constants import get_zone_boundary_x
+
+    food_list = []
+    ant_food_count = 0
+    spider_food_count = 0
+
+    for f in food_items:
+        if getattr(f, "consumed", False):
+            continue
+            
+        fx, fy = float(f.position[0]), float(f.position[1])
+        bound_x = get_zone_boundary_x(fy)
+        if fx < bound_x:
+            ant_food_count += 1
+        else:
+            spider_food_count += 1
+            
+        if build_list:
+            carried = bool(getattr(f, "being_carried", False))
+            food_list.append({
+                "x": round(fx, 2),
+                "y": round(fy, 2),
+                "type": getattr(f, "food_type", "sugar"),
+                "carried": carried,
+            })
+            
+    return food_list, ant_food_count, spider_food_count
 
 
 def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, Any]:
@@ -156,6 +199,8 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
                 "carrying": carried_obj is not None,
                 "carriedType": food_type,
                 "radius": float(getattr(c, "radius", 2.0)),
+                "visionRange": round(float(getattr(c, "vision_range", 180.0)), 1),
+                "fov": round(float(getattr(c, "fov", 160.0)), 1),
             })
         creatures_dict[species_name] = c_list
 
@@ -169,17 +214,7 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
             "maxPop": getattr(cls, "max_population", 100),
         }
 
-    food_list = []
-    for f in world.food_items:
-        if getattr(f, "consumed", False):
-            continue
-        carried = bool(getattr(f, "being_carried", False))
-        food_list.append({
-            "x": round(float(f.position[0]), 2),
-            "y": round(float(f.position[1]), 2),
-            "type": getattr(f, "food_type", "sugar"),
-            "carried": carried,
-        })
+    food_list, ant_food_count, spider_food_count = _process_food_items(world.food_items, build_list=True)
 
     food_sources_list = []
     for fs in getattr(world, "food_sources", []):
@@ -229,6 +264,7 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
         "world": {"width": WORLD_WIDTH, "height": WORLD_HEIGHT},
         "creatures": creatures_dict,
         "food": food_list,
+        "foodZoneRepartition": {"ant": ant_food_count, "spider": spider_food_count},
         "foodSources": food_sources_list,
         "kingdoms": kingdoms_list,
         "lakes": lakes_list,
@@ -258,6 +294,8 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
             "maxPop": getattr(cls, "max_population", 100),
         }
 
+    _, ant_food_count, spider_food_count = _process_food_items(world.food_items, build_list=False)
+
     return {
         "type": "aggregate",
         "time": world.round_time,
@@ -270,4 +308,5 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
         "ultra": True,
         "paused": paused,
         "population": population_dict,
+        "foodZoneRepartition": {"ant": ant_food_count, "spider": spider_food_count},
     }
