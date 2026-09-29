@@ -135,6 +135,37 @@ def compute_metric_bounds(world: Any, cls: type) -> dict[str, dict[str, float]]:
     return res
 
 
+def _process_food_items(food_items: list[Any], build_list: bool) -> tuple[list[dict[str, Any]], int, int]:
+    """Process food items to calculate zone counts and optionally build the serialization list."""
+    from core.constants import get_zone_boundary_x
+
+    food_list = []
+    ant_food_count = 0
+    spider_food_count = 0
+
+    for f in food_items:
+        if getattr(f, "consumed", False):
+            continue
+            
+        fx, fy = float(f.position[0]), float(f.position[1])
+        bound_x = get_zone_boundary_x(fy)
+        if fx < bound_x:
+            ant_food_count += 1
+        else:
+            spider_food_count += 1
+            
+        if build_list:
+            carried = bool(getattr(f, "being_carried", False))
+            food_list.append({
+                "x": round(fx, 2),
+                "y": round(fy, 2),
+                "type": getattr(f, "food_type", "sugar"),
+                "carried": carried,
+            })
+            
+    return food_list, ant_food_count, spider_food_count
+
+
 def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, Any]:
     """Build a full snapshot for rendering at normal speeds.
 
@@ -183,30 +214,7 @@ def build_full_snapshot(world: Any, simulation: Any, paused: bool) -> dict[str, 
             "maxPop": getattr(cls, "max_population", 100),
         }
 
-    food_list = []
-    ant_food_count = 0
-    spider_food_count = 0
-    
-    from core.constants import get_zone_boundary_x
-
-    for f in world.food_items:
-        if getattr(f, "consumed", False):
-            continue
-        carried = bool(getattr(f, "being_carried", False))
-        
-        fx, fy = float(f.position[0]), float(f.position[1])
-        bound_x = get_zone_boundary_x(fy)
-        if fx < bound_x:
-            ant_food_count += 1
-        else:
-            spider_food_count += 1
-            
-        food_list.append({
-            "x": round(fx, 2),
-            "y": round(fy, 2),
-            "type": getattr(f, "food_type", "sugar"),
-            "carried": carried,
-        })
+    food_list, ant_food_count, spider_food_count = _process_food_items(world.food_items, build_list=True)
 
     food_sources_list = []
     for fs in getattr(world, "food_sources", []):
@@ -286,18 +294,7 @@ def build_aggregate_snapshot(world: Any, simulation: Any, paused: bool) -> dict[
             "maxPop": getattr(cls, "max_population", 100),
         }
 
-    ant_food_count = 0
-    spider_food_count = 0
-    from core.constants import get_zone_boundary_x
-
-    for f in world.food_items:
-        if getattr(f, "consumed", False):
-            continue
-        fx, fy = float(f.position[0]), float(f.position[1])
-        if fx < get_zone_boundary_x(fy):
-            ant_food_count += 1
-        else:
-            spider_food_count += 1
+    _, ant_food_count, spider_food_count = _process_food_items(world.food_items, build_list=False)
 
     return {
         "type": "aggregate",
